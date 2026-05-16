@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wave Length Calculator — HydroCalc</title>
+  <meta name="description" content="Calculate ocean wave length from period and depth using the linear dispersion relation solved by Newton–Raphson." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Wave Length Calculator</h1>
+    <p class="subtitle">Linear dispersion relation &middot; Newton&ndash;Raphson solver</p>
+  </header>
+
+  <main>
+    <section class="input-section" aria-label="Wave parameters">
+      <form id="wave-form" novalidate>
+
+        <div class="field-group">
+          <label for="period">Wave Period <i>T</i></label>
+          <div class="input-wrapper">
+            <input
+              type="number"
+              id="period"
+              name="period"
+              inputmode="decimal"
+              step="any"
+              min="0"
+              placeholder="e.g. 10"
+              aria-describedby="period-hint period-error"
+            />
+            <span class="unit">s</span>
+          </div>
+          <span id="period-hint" class="hint">Seconds &mdash; must be &gt; 0</span>
+          <span id="period-error" class="field-error" role="alert" aria-live="polite"></span>
+        </div>
+
+        <div class="field-group">
+          <label for="depth">Water Depth <i>d</i></label>
+          <div class="input-wrapper">
+            <input
+              type="number"
+              id="depth"
+              name="depth"
+              inputmode="decimal"
+              step="any"
+              min="0"
+              placeholder="e.g. 25"
+              aria-describedby="depth-hint depth-error"
+            />
+            <span class="unit">m</span>
+          </div>
+          <span id="depth-hint" class="hint">Meters &mdash; must be &gt; 0</span>
+          <span id="depth-error" class="field-error" role="alert" aria-live="polite"></span>
+        </div>
+
+        <button type="submit" id="calculate-btn">Calculate</button>
+
+      </form>
+    </section>
+
+    <section class="results-section" id="results" aria-label="Calculation results" hidden>
+
+      <div class="classification-badge" id="classification-badge"></div>
+
+      <table class="results-table" aria-label="Wave properties">
+        <tbody>
+          <tr>
+            <th scope="row">Wavelength <i>L</i></th>
+            <td id="res-L"></td>
+            <td class="unit-col">m</td>
+          </tr>
+          <tr>
+            <th scope="row">Wave number <i>k</i> = 2&pi;/<i>L</i></th>
+            <td id="res-k"></td>
+            <td class="unit-col">rad/m</td>
+          </tr>
+          <tr>
+            <th scope="row">Wave celerity <i>C</i> = <i>L</i>/<i>T</i></th>
+            <td id="res-C"></td>
+            <td class="unit-col">m/s</td>
+          </tr>
+          <tr>
+            <th scope="row">Deep-water wavelength <i>L</i><sub>0</sub></th>
+            <td id="res-L0"></td>
+            <td class="unit-col">m</td>
+          </tr>
+          <tr>
+            <th scope="row">Relative depth <i>d</i>/<i>L</i></th>
+            <td id="res-dL"></td>
+            <td class="unit-col">&mdash;</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="formula-note">
+        &omega;&sup2; = g &middot; k &middot; tanh(k&thinsp;d) &nbsp;&nbsp;|&nbsp;&nbsp; g = 9.81 m/s&sup2;
+      </p>
+
+    </section>
+
+    <section class="solver-error-section" id="solver-error" aria-live="assertive" hidden>
+      <p id="solver-error-msg"></p>
+    </section>
+  </main>
+
+  <footer>
+    <p>HydroCalc &middot; SI units only &middot; Linear wave theory</p>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>

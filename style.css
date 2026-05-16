@@ -1,0 +1,317 @@
+/* ── Design tokens ───────────────────────────────────────────────────────── */
+:root {
+  --color-bg:           #f0f4f8;
+  --color-surface:      #ffffff;
+  --color-primary:      #1565c0;
+  --color-primary-dk:   #0d47a1;
+  --color-text:         #1a202c;
+  --color-text-muted:   #4a5568;
+  --color-border:       #cbd5e0;
+  --color-error:        #c53030;
+  --color-error-bg:     #fff5f5;
+  --color-deep:         #1565c0;
+  --color-intermediate: #2e7d32;
+  --color-shallow:      #e65100;
+  --radius:             8px;
+  --shadow:             0 2px 10px rgba(0, 0, 0, 0.08);
+  --font-mono:          'Courier New', Courier, monospace;
+}
+
+/* ── Reset / base ────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.5;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+header {
+  background: var(--color-primary);
+  color: #fff;
+  padding: 1.25rem 1rem 1rem;
+  text-align: center;
+}
+
+header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+header .subtitle {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  margin-top: 0.2rem;
+  font-style: italic;
+}
+
+/* ── Main layout ─────────────────────────────────────────────────────────── */
+main {
+  flex: 1;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* ── Input card ──────────────────────────────────────────────────────────── */
+.input-section {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1rem;
+}
+
+/* ── Field group ─────────────────────────────────────────────────────────── */
+.field-group {
+  margin-bottom: 1.1rem;
+}
+
+.field-group label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 0.35rem;
+}
+
+/* Input + unit badge side by side */
+.input-wrapper {
+  display: flex;
+  align-items: stretch;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.input-wrapper:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.15);
+}
+
+.input-wrapper input {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 0.75rem 0.875rem;
+  font-size: 1.125rem;
+  color: var(--color-text);
+  background: transparent;
+  min-width: 0; /* prevent overflow in flex */
+}
+
+/* Remove browser number input spinners */
+.input-wrapper input::-webkit-outer-spin-button,
+.input-wrapper input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.input-wrapper input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.input-wrapper .unit {
+  background: var(--color-bg);
+  padding: 0 0.875rem;
+  display: flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-left: 1.5px solid var(--color-border);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.hint {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 0.3rem;
+}
+
+.field-error {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--color-error);
+  margin-top: 0.3rem;
+  min-height: 1.1em;
+  font-weight: 500;
+}
+
+/* ── Calculate button ────────────────────────────────────────────────────── */
+#calculate-btn {
+  display: block;
+  width: 100%;
+  margin-top: 1.5rem;
+  padding: 0.875rem 1rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-family: inherit;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: background 0.15s, transform 0.1s;
+}
+
+#calculate-btn:hover  { background: var(--color-primary-dk); }
+#calculate-btn:active { transform: scale(0.98); }
+#calculate-btn:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ── Results card ────────────────────────────────────────────────────────── */
+.results-section {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1rem;
+}
+
+/* Classification badge */
+.classification-badge {
+  display: inline-block;
+  padding: 0.35rem 1rem;
+  border-radius: 2rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fff;
+  margin-bottom: 1.1rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.classification-badge.deep         { background: var(--color-deep); }
+.classification-badge.intermediate { background: var(--color-intermediate); }
+.classification-badge.shallow      { background: var(--color-shallow); }
+
+/* Results table */
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.results-table tr {
+  border-bottom: 1px solid var(--color-bg);
+}
+
+.results-table tr:last-child {
+  border-bottom: none;
+}
+
+.results-table th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  padding: 0.55rem 0;
+  padding-right: 0.5rem;
+  width: 52%;
+  vertical-align: middle;
+}
+
+.results-table td {
+  padding: 0.55rem 0;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  color: var(--color-text);
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.results-table .unit-col {
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  padding-left: 0.4rem;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.formula-note {
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+  text-align: center;
+  border-top: 1px solid var(--color-bg);
+  padding-top: 0.75rem;
+}
+
+/* ── Solver error card ───────────────────────────────────────────────────── */
+.solver-error-section {
+  background: var(--color-error-bg);
+  border: 1.5px solid #feb2b2;
+  border-radius: var(--radius);
+  padding: 1rem;
+  color: var(--color-error);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+footer {
+  text-align: center;
+  padding: 1rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Desktop breakpoint ──────────────────────────────────────────────────── */
+@media (min-width: 640px) {
+  header {
+    padding: 1.75rem 1rem 1.25rem;
+  }
+
+  header h1 {
+    font-size: 1.875rem;
+  }
+
+  header .subtitle {
+    font-size: 0.875rem;
+  }
+
+  main {
+    padding: 2rem 1rem 3rem;
+    gap: 1.5rem;
+  }
+
+  .input-section,
+  .results-section {
+    padding: 1.75rem 1.5rem;
+  }
+
+  .results-table th {
+    font-size: 0.925rem;
+  }
+
+  .results-table td {
+    font-size: 1.05rem;
+  }
+}
