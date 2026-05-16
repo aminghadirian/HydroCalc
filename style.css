@@ -12,9 +12,16 @@
   --color-deep:         #1565c0;
   --color-intermediate: #2e7d32;
   --color-shallow:      #e65100;
-  --radius:             8px;
-  --shadow:             0 2px 10px rgba(0, 0, 0, 0.08);
-  --font-mono:          'Courier New', Courier, monospace;
+  /* Wave theory colors */
+  --color-theory-linear:   #1565c0;
+  --color-theory-stokes2:  #2e7d32;
+  --color-theory-stokes34: #e65100;
+  --color-theory-cnoidal:  #6a1b9a;
+  --color-theory-solitary: #795548;
+  --color-theory-breaking: #c62828;
+  --radius: 8px;
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  --font-mono: 'Courier New', Courier, monospace;
 }
 
 /* ── Reset / base ────────────────────────────────────────────────────────── */
@@ -64,7 +71,7 @@ header .subtitle {
 main {
   flex: 1;
   width: 100%;
-  max-width: 600px;
+  max-width: 640px;
   margin: 0 auto;
   padding: 1.25rem 1rem 2rem;
   display: flex;
@@ -93,6 +100,22 @@ main {
   margin-bottom: 0.35rem;
 }
 
+/* ── Optional badge ──────────────────────────────────────────────────────── */
+.optional-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 2rem;
+  padding: 0.1rem 0.45rem;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
 /* Input + unit badge side by side */
 .input-wrapper {
   display: flex;
@@ -116,10 +139,9 @@ main {
   font-size: 1.125rem;
   color: var(--color-text);
   background: transparent;
-  min-width: 0; /* prevent overflow in flex */
+  min-width: 0;
 }
 
-/* Remove browser number input spinners */
 .input-wrapper input::-webkit-outer-spin-button,
 .input-wrapper input::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -191,7 +213,6 @@ main {
   padding: 1.25rem 1rem;
 }
 
-/* Classification badge */
 .classification-badge {
   display: inline-block;
   padding: 0.35rem 1rem;
@@ -208,7 +229,6 @@ main {
 .classification-badge.intermediate { background: var(--color-intermediate); }
 .classification-badge.shallow      { background: var(--color-shallow); }
 
-/* Results table */
 .results-table {
   width: 100%;
   border-collapse: collapse;
@@ -263,6 +283,62 @@ main {
   padding-top: 0.75rem;
 }
 
+/* ── Theory / Le Méhaut card ─────────────────────────────────────────────── */
+.theory-section {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1rem;
+}
+
+.theory-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.theory-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Badge color driven by data-theory attribute via CSS custom property cascade */
+.theory-badge {
+  display: inline-block;
+  padding: 0.35rem 1rem;
+  border-radius: 2rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fff;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: var(--_theory-color, #888);
+}
+
+.theory-badge[data-theory="linear"]   { --_theory-color: var(--color-theory-linear); }
+.theory-badge[data-theory="stokes2"]  { --_theory-color: var(--color-theory-stokes2); }
+.theory-badge[data-theory="stokes34"] { --_theory-color: var(--color-theory-stokes34); }
+.theory-badge[data-theory="cnoidal"]  { --_theory-color: var(--color-theory-cnoidal); }
+.theory-badge[data-theory="solitary"] { --_theory-color: var(--color-theory-solitary); }
+.theory-badge[data-theory="breaking"] { --_theory-color: var(--color-theory-breaking); }
+
+/* SVG plot container — makes SVG responsive */
+.lehaut-container {
+  width: 100%;
+  overflow: hidden;
+  margin-bottom: 0.25rem;
+}
+
+.lehaut-container svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 /* ── Solver error card ───────────────────────────────────────────────────── */
 .solver-error-section {
   background: var(--color-error-bg);
@@ -303,7 +379,8 @@ footer {
   }
 
   .input-section,
-  .results-section {
+  .results-section,
+  .theory-section {
     padding: 1.75rem 1.5rem;
   }
 

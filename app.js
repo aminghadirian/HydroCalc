@@ -1,25 +1,24 @@
 'use strict';
 
 // ── Physical constants ────────────────────────────────────────────────────
-const G       = 9.81;
-const TWO_PI  = 2 * Math.PI;
+const G        = 9.81;
+const TWO_PI   = 2 * Math.PI;
 const MAX_ITER = 100;
-const TOL      = 1e-8;  // convergence threshold: |Δk / k|
+const TOL      = 1e-8;
 
 // ── Layer 1: Newton–Raphson solver ────────────────────────────────────────
 // Solves ω² = g·k·tanh(k·d) for k given T and d.
-// Initial guess k₀ = ω²/g is the exact deep-water solution and ensures
-// guaranteed convergence for all physically valid (T, d) pairs.
+// Initial guess k₀ = ω²/g is exact in deep water and guarantees convergence.
 function solveDispersion(T, d) {
   const omega  = TWO_PI / T;
   const omega2 = omega * omega;
 
-  let k = omega2 / G;  // deep-water initial guess
+  let k = omega2 / G;
 
   for (let i = 0; i < MAX_ITER; i++) {
     const kd    = k * d;
     const tanh  = Math.tanh(kd);
-    const sech2 = 1 - tanh * tanh;  // sech²(kd) = 1 - tanh²(kd)
+    const sech2 = 1 - tanh * tanh;
 
     const f  = omega2 - G * k * tanh;
     const fp = -G * (tanh + kd * sech2);
@@ -55,8 +54,34 @@ function computeWaveProperties(T, d) {
   return { k, L, C, L0, dOverL, classification, iterations };
 }
 
+// ── Layer 2.5: Wave theory classification ─────────────────────────────────
+function classifyWaveTheory(H, k, L, d) {
+  const dOverL = d / L;
+  const HOverL = H / L;
+  const HOverd = H / d;
+  const kd     = k * d;
+  const Ur     = (H * L * L) / (d * d * d);
+
+  // Breaking — Miche (1951): general depth-dependent criterion
+  if (HOverL >= 0.142 * Math.tanh(kd)) return 'breaking';
+
+  // Breaking — McCowan: applies in shallow water
+  if (HOverd >= 0.78 && dOverL <= 0.05) return 'breaking';
+
+  // Stokes regime: intermediate to deep water, Ursell number small
+  if (dOverL > 0.05 && Ur <= 26) {
+    if (HOverL > 0.04)  return 'stokes34';
+    if (HOverL > 0.006) return 'stokes2';
+    return 'linear';
+  }
+
+  // Shallow / high-Ursell (Cnoidal) regime
+  if (HOverd > 0.5) return 'solitary';
+  return 'cnoidal';
+}
+
 // ── Layer 3: Input validation ─────────────────────────────────────────────
-function validateInputs(rawT, rawD) {
+function validateInputs(rawT, rawD, rawH) {
   const errors = {};
   const T = parseFloat(rawT);
   const d = parseFloat(rawD);
@@ -77,27 +102,21 @@ function validateInputs(rawT, rawD) {
     errors.depth = 'Water depth must be ≤ 11,000 m (Mariana Trench depth).';
   }
 
+  let H;
+  if (rawH !== undefined && rawH.trim() !== '') {
+    const parsedH = parseFloat(rawH);
+    if (isNaN(parsedH) || parsedH <= 0) {
+      errors.height = 'Wave height must be greater than 0 if provided.';
+    } else {
+      H = parsedH;
+    }
+  }
+
   if (Object.keys(errors).length > 0) return { valid: false, errors };
-  return { valid: true, T, d };
+  return { valid: true, T, d, H };
 }
 
 // ── Layer 4: DOM controller ───────────────────────────────────────────────
-
-// Element references — cached once at startup
-const form          = document.getElementById('wave-form');
-const periodInput   = document.getElementById('period');
-const depthInput    = document.getElementById('depth');
-const periodError   = document.getElementById('period-error');
-const depthError    = document.getElementById('depth-error');
-const resultsEl     = document.getElementById('results');
-const solverErrEl   = document.getElementById('solver-error');
-const solverErrMsg  = document.getElementById('solver-error-msg');
-const badge         = document.getElementById('classification-badge');
-const resL          = document.getElementById('res-L');
-const resK          = document.getElementById('res-k');
-const resC          = document.getElementById('res-C');
-const resL0         = document.getElementById('res-L0');
-const resDL         = document.getElementById('res-dL');
 
 const BADGE_LABELS = {
   deep:         'Deep Water',
@@ -105,7 +124,45 @@ const BADGE_LABELS = {
   shallow:      'Shallow Water',
 };
 
-// Format to 4 significant figures, removing trailing zeros
+const THEORY_COLORS = {
+  linear:   '#1565c0',
+  stokes2:  '#2e7d32',
+  stokes34: '#e65100',
+  cnoidal:  '#6a1b9a',
+  solitary: '#795548',
+  breaking: '#c62828',
+};
+
+const THEORY_LABELS = {
+  linear:   'Linear (Airy)',
+  stokes2:  'Stokes 2nd Order',
+  stokes34: 'Stokes 3rd/4th Order',
+  cnoidal:  'Cnoidal Wave',
+  solitary: 'Solitary Wave',
+  breaking: 'Breaking Wave',
+};
+
+// Element references — cached once at startup
+const form         = document.getElementById('wave-form');
+const periodInput  = document.getElementById('period');
+const depthInput   = document.getElementById('depth');
+const heightInput  = document.getElementById('height');
+const periodError  = document.getElementById('period-error');
+const depthError   = document.getElementById('depth-error');
+const heightError  = document.getElementById('height-error');
+const resultsEl    = document.getElementById('results');
+const solverErrEl  = document.getElementById('solver-error');
+const solverErrMsg = document.getElementById('solver-error-msg');
+const badge        = document.getElementById('classification-badge');
+const resL         = document.getElementById('res-L');
+const resK         = document.getElementById('res-k');
+const resC         = document.getElementById('res-C');
+const resL0        = document.getElementById('res-L0');
+const resDL        = document.getElementById('res-dL');
+const theorySect   = document.getElementById('theory-section');
+const theoryBadge  = document.getElementById('theory-badge');
+const lehautPlot   = document.getElementById('lehaut-plot');
+
 function fmt(n) {
   return parseFloat(n.toPrecision(4)).toString();
 }
@@ -113,6 +170,7 @@ function fmt(n) {
 function clearErrors() {
   periodError.textContent  = '';
   depthError.textContent   = '';
+  heightError.textContent  = '';
   solverErrEl.hidden       = true;
   solverErrMsg.textContent = '';
 }
@@ -120,6 +178,7 @@ function clearErrors() {
 function showFieldErrors(errors) {
   if (errors.period) periodError.textContent = errors.period;
   if (errors.depth)  depthError.textContent  = errors.depth;
+  if (errors.height) heightError.textContent = errors.height;
 }
 
 function showResults(props) {
@@ -137,12 +196,296 @@ function showResults(props) {
   resultsEl.hidden = false;
 }
 
+// ── Le Méhaut SVG builder ─────────────────────────────────────────────────
+function buildLeMehautSVG(userX, userY, theory) {
+  // Viewport and plot margins (SVG coordinate units)
+  const VW = 560, VH = 400;
+  const ML = 65, MT = 20, MR = 540, MB = 345;
+  const PW = MR - ML;   // 475
+  const PH = MB - MT;   // 325
+
+  // Log₁₀ axis limits
+  const XMIN = -3,    XMAX = Math.log10(0.5);    // d/gT²: 0.001 → 0.5
+  const YMIN = -5.3,  YMAX = Math.log10(0.07);   // H/gT²: 5e-6  → 0.07
+
+  function toSVG(domX, domY) {
+    if (domX <= 0 || domY <= 0) return null;
+    const lx = Math.log10(domX);
+    const ly = Math.log10(domY);
+    if (!isFinite(lx) || !isFinite(ly)) return null;
+    const px = ML + (lx - XMIN) / (XMAX - XMIN) * PW;
+    const py = MB - (ly - YMIN) / (YMAX - YMIN) * PH;
+    return [px, py];
+  }
+
+  // Compute boundary curves (150 log-spaced x values, T_ref = 1 s)
+  const N = 150;
+  const michePts    = [];
+  const mccowanPts  = [];
+  const ur26Pts     = [];
+  const linSt2Pts   = [];
+  const st23Pts     = [];
+  const breakEnvPts = [];   // min(Miche, McCowan) for red fill polygon
+
+  for (let i = 0; i < N; i++) {
+    const logX  = XMIN + i / (N - 1) * (XMAX - XMIN);
+    const x     = Math.pow(10, logX);
+    const d_ref = x * G;   // T_ref = 1 → gT² = G·1² = G
+
+    let lambda, kd_ref, tanh_kd;
+    try {
+      const { k } = solveDispersion(1, d_ref);
+      lambda   = (TWO_PI / k) / G;   // L / gT²
+      kd_ref   = k * d_ref;
+      tanh_kd  = Math.tanh(kd_ref);
+    } catch (_) {
+      michePts.push(null);
+      mccowanPts.push([x, 0.78 * x]);
+      ur26Pts.push(null);
+      linSt2Pts.push(null);
+      st23Pts.push(null);
+      breakEnvPts.push(null);
+      continue;
+    }
+
+    const yMiche    = 0.142 * tanh_kd * lambda;
+    const yMcCowan  = 0.78 * x;
+    const yUr26     = (lambda > 0) ? 26 * x * x * x / (lambda * lambda) : NaN;
+    const yLinSt2   = 0.006 * lambda;
+    const ySt23     = 0.04  * lambda;
+    const yBreakEnv = Math.min(yMiche, yMcCowan);
+
+    michePts.push(isFinite(yMiche)    ? [x, yMiche]    : null);
+    mccowanPts.push([x, yMcCowan]);
+    ur26Pts.push(isFinite(yUr26)      ? [x, yUr26]     : null);
+    linSt2Pts.push(isFinite(yLinSt2)  ? [x, yLinSt2]   : null);
+    st23Pts.push(isFinite(ySt23)      ? [x, ySt23]      : null);
+    breakEnvPts.push(isFinite(yBreakEnv) ? [x, yBreakEnv] : null);
+  }
+
+  // Build one or more <polyline> elements; splits on null entries (gaps)
+  function makeCurve(pts, stroke, dasharray, width) {
+    const segments = [];
+    let current    = [];
+    for (const pt of pts) {
+      if (pt === null) {
+        if (current.length >= 2) segments.push(current);
+        current = [];
+        continue;
+      }
+      const sv = toSVG(pt[0], pt[1]);
+      if (sv === null) {
+        if (current.length >= 2) segments.push(current);
+        current = [];
+      } else {
+        current.push(sv);
+      }
+    }
+    if (current.length >= 2) segments.push(current);
+
+    const da = dasharray ? `stroke-dasharray="${dasharray}"` : '';
+    return segments.map(seg => {
+      const pStr = seg.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+      return `<polyline points="${pStr}" fill="none" stroke="${stroke}" stroke-width="${width}" ${da} stroke-linecap="round" clip-path="url(#plot-clip)"/>`;
+    }).join('');
+  }
+
+  // Red fill polygon for breaking zone (above effective breaking envelope)
+  function breakingPolygon() {
+    const envSVG = [];
+    for (const pt of breakEnvPts) {
+      if (pt === null) continue;
+      const sv = toSVG(pt[0], pt[1]);
+      if (sv) envSVG.push(sv);
+    }
+    if (envSVG.length < 2) return '';
+    // Polygon: top-left → top-right → breaking curve right-to-left → close
+    const pts = [
+      [ML, MT], [MR, MT],
+      ...envSVG.slice().reverse(),
+    ];
+    const pStr = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+    return `<polygon points="${pStr}" fill="#ffcdd2" opacity="0.55" clip-path="url(#plot-clip)"/>`;
+  }
+
+  // Log-decade grid lines
+  function grid() {
+    const xGridVals = [0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009,
+                       0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09,
+                       0.1, 0.2, 0.3, 0.4, 0.5];
+    const yGridVals = [5e-6, 1e-5, 2e-5, 3e-5, 4e-5, 5e-5, 6e-5, 7e-5, 8e-5, 9e-5,
+                       1e-4, 2e-4, 3e-4, 4e-4, 5e-4, 6e-4, 7e-4, 8e-4, 9e-4,
+                       1e-3, 2e-3, 3e-3, 4e-3, 5e-3, 6e-3, 7e-3, 8e-3, 9e-3,
+                       1e-2, 2e-2, 3e-2, 4e-2, 5e-2, 6e-2, 7e-2];
+    let g = '';
+    for (const xv of xGridVals) {
+      const sv = toSVG(xv, 1e-3);
+      if (!sv) continue;
+      const isDec = Number.isInteger(Math.log10(xv));
+      g += `<line x1="${sv[0].toFixed(1)}" y1="${MT}" x2="${sv[0].toFixed(1)}" y2="${MB}" stroke="#e2e8f0" stroke-width="${isDec ? 0.8 : 0.4}" clip-path="url(#plot-clip)"/>`;
+    }
+    for (const yv of yGridVals) {
+      const sv = toSVG(0.01, yv);
+      if (!sv) continue;
+      const lv = Math.log10(yv);
+      const isDec = Math.abs(lv - Math.round(lv)) < 0.001;
+      g += `<line x1="${ML}" y1="${sv[1].toFixed(1)}" x2="${MR}" y2="${sv[1].toFixed(1)}" stroke="#e2e8f0" stroke-width="${isDec ? 0.8 : 0.4}" clip-path="url(#plot-clip)"/>`;
+    }
+    return g;
+  }
+
+  // Axis tick marks and labels
+  function axes() {
+    let s = '';
+
+    // X-axis — major ticks with labels
+    const xMajor = [
+      [0.001, '10⁻³'], [0.01, '10⁻²'], [0.1, '10⁻¹'],
+    ];
+    // X-axis — minor ticks without labels (intermediate decades)
+    const xMinor = [0.002, 0.005, 0.02, 0.05, 0.2, 0.5];
+
+    for (const [xv, lbl] of xMajor) {
+      const sv = toSVG(xv, 1e-3);
+      if (!sv) continue;
+      const px = sv[0].toFixed(1);
+      s += `<line x1="${px}" y1="${MB}" x2="${px}" y2="${MB + 5}" stroke="#555" stroke-width="1"/>`;
+      s += `<text x="${px}" y="${MB + 16}" text-anchor="middle" font-size="11" fill="#444">${lbl}</text>`;
+    }
+    for (const xv of xMinor) {
+      const sv = toSVG(xv, 1e-3);
+      if (!sv) continue;
+      const px = sv[0].toFixed(1);
+      s += `<line x1="${px}" y1="${MB}" x2="${px}" y2="${MB + 3}" stroke="#888" stroke-width="0.8"/>`;
+    }
+
+    // Y-axis — major ticks with labels
+    const yMajor = [
+      [1e-5, '10⁻⁵'], [1e-4, '10⁻⁴'],
+      [1e-3, '10⁻³'], [1e-2, '10⁻²'],
+    ];
+    const yMinor = [5e-6, 5e-5, 5e-4, 5e-3, 5e-2];
+
+    for (const [yv, lbl] of yMajor) {
+      const sv = toSVG(0.01, yv);
+      if (!sv) continue;
+      const py = sv[1].toFixed(1);
+      s += `<line x1="${ML - 5}" y1="${py}" x2="${ML}" y2="${py}" stroke="#555" stroke-width="1"/>`;
+      s += `<text x="${ML - 7}" y="${py}" text-anchor="end" dominant-baseline="middle" font-size="11" fill="#444">${lbl}</text>`;
+    }
+    for (const yv of yMinor) {
+      const sv = toSVG(0.01, yv);
+      if (!sv) continue;
+      const py = sv[1].toFixed(1);
+      s += `<line x1="${ML - 3}" y1="${py}" x2="${ML}" y2="${py}" stroke="#888" stroke-width="0.8"/>`;
+    }
+
+    // Axis title labels
+    const cx = ((ML + MR) / 2).toFixed(1);
+    const cy = ((MT + MB) / 2).toFixed(1);
+    s += `<text x="${cx}" y="${VH - 3}" text-anchor="middle" font-size="12" font-style="italic" fill="#333">d / gT²</text>`;
+    s += `<text x="13" y="${cy}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-style="italic" fill="#333" transform="rotate(-90,13,${cy})">H / gT²</text>`;
+
+    return s;
+  }
+
+  // Region text labels — domain coordinates chosen to sit inside each zone
+  function regionLabels() {
+    const labels = [
+      // [domX, domY, text]
+      [0.05,  1.5e-5, 'Linear (Airy)'],
+      [0.05,  3e-3,   'Stokes 2ⁿᵈ'],
+      [0.04,  8e-3,   'Stokes 3ʳᵈ– 4ᵗʰ'],
+      [0.005, 2e-3,   'Cnoidal'],
+      [0.002, 1.2e-3, 'Solitary'],
+      [0.02,  0.015,  'Breaking'],
+    ];
+    let s = `<g clip-path="url(#plot-clip)" font-size="10" fill="#444" font-style="italic" text-anchor="middle" dominant-baseline="middle">`;
+    for (const [xv, yv, txt] of labels) {
+      const sv = toSVG(xv, yv);
+      if (!sv) continue;
+      s += `<text x="${sv[0].toFixed(1)}" y="${sv[1].toFixed(1)}">${txt}</text>`;
+    }
+    s += `</g>`;
+    return s;
+  }
+
+  // Legend — placed upper-left with white background for readability
+  function legend() {
+    const items = [
+      ['#c62828', '',    'Miche (1951) breaking'],
+      ['#e65100', '6,3', 'McCowan  H/d = 0.78'],
+      ['#6a1b9a', '5,3', 'Ursell  Ur = 26'],
+      ['#1565c0', '4,3', 'Linear / Stokes 2ⁿᵈ'],
+      ['#00695c', '4,3', 'Stokes 2ⁿᵈ / 3ʳᵈ–4ᵗʰ'],
+    ];
+    const LX = ML + 5;
+    const LY = MT + 8;
+    const LW = 162;
+    const LH = items.length * 14 + 8;
+    let s = `<rect x="${LX - 3}" y="${LY - 5}" width="${LW}" height="${LH}" fill="white" fill-opacity="0.90" rx="3" stroke="#ddd" stroke-width="0.5"/>`;
+    items.forEach(([color, dash, lbl], i) => {
+      const ly = LY + 8 + i * 14;
+      const da = dash ? `stroke-dasharray="${dash}"` : '';
+      s += `<line x1="${LX}" y1="${ly}" x2="${LX + 20}" y2="${ly}" stroke="${color}" stroke-width="1.8" ${da}/>`;
+      s += `<text x="${LX + 24}" y="${ly}" dominant-baseline="middle" font-size="9" fill="#333" font-style="normal">${lbl}</text>`;
+    });
+    return s;
+  }
+
+  // User wave dot and crosshairs
+  function userDot() {
+    if (!userX || !userY) return '';
+    const sv = toSVG(userX, userY);
+    if (!sv) return '';
+    const [ux, uy] = [sv[0].toFixed(1), sv[1].toFixed(1)];
+    const color = THEORY_COLORS[theory];
+    return `<g clip-path="url(#plot-clip)">
+      <line x1="${ux}" y1="${MT}" x2="${ux}" y2="${MB}" stroke="${color}" stroke-width="0.9" stroke-dasharray="3,3" opacity="0.65"/>
+      <line x1="${ML}" y1="${uy}" x2="${MR}" y2="${uy}" stroke="${color}" stroke-width="0.9" stroke-dasharray="3,3" opacity="0.65"/>
+      <circle cx="${ux}" cy="${uy}" r="7" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+    </g>`;
+  }
+
+  // Axis border rect — drawn last so it sits on top of all content
+  function border() {
+    return `<rect x="${ML}" y="${MT}" width="${PW}" height="${PH}" fill="none" stroke="#555" stroke-width="1.5"/>`;
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VW} ${VH}" role="img" aria-label="Le Méhaut wave theory applicability diagram">
+  <defs>
+    <clipPath id="plot-clip">
+      <rect x="${ML}" y="${MT}" width="${PW}" height="${PH}"/>
+    </clipPath>
+  </defs>
+  <rect x="${ML}" y="${MT}" width="${PW}" height="${PH}" fill="#fff"/>
+  ${breakingPolygon()}
+  ${grid()}
+  ${makeCurve(michePts,   '#c62828', '',    1.8)}
+  ${makeCurve(mccowanPts, '#e65100', '6,3', 1.5)}
+  ${makeCurve(ur26Pts,    '#6a1b9a', '5,3', 1.5)}
+  ${makeCurve(linSt2Pts,  '#1565c0', '4,3', 1.3)}
+  ${makeCurve(st23Pts,    '#00695c', '4,3', 1.3)}
+  ${axes()}
+  ${regionLabels()}
+  ${legend()}
+  ${userDot()}
+  ${border()}
+</svg>`;
+}
+
+// ── Event handlers ────────────────────────────────────────────────────────
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   clearErrors();
-  resultsEl.hidden = true;
+  resultsEl.hidden  = true;
+  theorySect.hidden = true;
 
-  const validation = validateInputs(periodInput.value, depthInput.value);
+  const validation = validateInputs(
+    periodInput.value,
+    depthInput.value,
+    heightInput.value,
+  );
 
   if (!validation.valid) {
     showFieldErrors(validation.errors);
@@ -152,12 +495,27 @@ form.addEventListener('submit', (e) => {
   try {
     const props = computeWaveProperties(validation.T, validation.d);
     showResults(props);
+
+    if (validation.H !== undefined) {
+      const { k, L } = props;
+      const theory = classifyWaveTheory(validation.H, k, L, validation.d);
+
+      theoryBadge.textContent   = THEORY_LABELS[theory];
+      theoryBadge.dataset.theory = theory;
+
+      const gT2   = G * validation.T * validation.T;
+      const userX = validation.d / gT2;
+      const userY = validation.H / gT2;
+
+      lehautPlot.innerHTML = buildLeMehautSVG(userX, userY, theory);
+      theorySect.hidden    = false;
+    }
   } catch (err) {
     solverErrMsg.textContent = err.message;
     solverErrEl.hidden = false;
   }
 });
 
-// Clear per-field errors as soon as the user starts editing
 periodInput.addEventListener('input', () => { periodError.textContent = ''; });
 depthInput.addEventListener('input',  () => { depthError.textContent  = ''; });
+heightInput.addEventListener('input', () => { heightError.textContent = ''; });
