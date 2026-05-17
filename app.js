@@ -323,18 +323,39 @@ function buildLeMehautSVG(userX, userY, theory) {
 
   // ── Shaded regions ────────────────────────────────────────────────────────
 
-  // Linear (Airy) region: below the y = 4π²x³ line (linSt2Pts) across the full plot width
+  // Linear (Airy) region — two separate polygons, one per segment of the piecewise curve
   function linearFill() {
-    const upper = [];
+    const cubic = [];   // points before the null gap  (x < X_DEEP, cubic segment)
+    const horiz = [];   // points after the null gap   (x ≥ X_DEEP, horizontal segment)
+    let gapSeen = false;
     for (const pt of linSt2Pts) {
-      if (pt === null) continue;
+      if (pt === null) { gapSeen = true; continue; }
       const sv = toSVG(pt[0], pt[1]);
-      if (sv) upper.push(sv);
+      if (!sv) continue;
+      (gapSeen ? horiz : cubic).push(sv);
     }
-    if (upper.length < 2) return '';
-    const pts = [[ML, MB], [MR, MB], ...upper.slice().reverse()];
-    const pStr = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
-    return `<polygon points="${pStr}" fill="#90a4ae" opacity="0.35" clip-path="url(#plot-clip)"/>`;
+    let s = '';
+    // Deep-water fill: strip below the horizontal steepness limit (y ≈ 0.000955)
+    if (horiz.length >= 2) {
+      const pts = [
+        [horiz[0][0], MB],
+        [horiz[horiz.length - 1][0], MB],
+        ...horiz.slice().reverse(),
+      ];
+      const pStr = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+      s += `<polygon points="${pStr}" fill="#90a4ae" opacity="0.35" clip-path="url(#plot-clip)"/>`;
+    }
+    // Intermediate fill: wedge below the Ur₀=1 cubic (first appears above y-min at x ≈ 0.011)
+    if (cubic.length >= 2) {
+      const pts = [
+        [ML, MB],
+        [cubic[cubic.length - 1][0], MB],
+        ...cubic.slice().reverse(),
+      ];
+      const pStr = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+      s += `<polygon points="${pStr}" fill="#90a4ae" opacity="0.35" clip-path="url(#plot-clip)"/>`;
+    }
+    return s;
   }
 
   // Cnoidal region: above Ursell U=26 curve and below breaking envelope (shallow zone)
@@ -462,11 +483,10 @@ function buildLeMehautSVG(userX, userY, theory) {
   // Region text labels
   function regionLabels() {
     const labels = [
-      [0.07,  6e-5,  'Linear (Airy)'],
-      [0.05,  5e-3,  'Stokes'],
-      [0.004, 2e-3,  'Cnoidal'],
-      [0.0018,3e-3,  'Solitary'],
-      [0.015, 0.03,  'Breaking'],
+      [0.008, 0.025, 'Breaking'],
+      [0.007, 2e-3,  'Cnoidal'],
+      [0.04,  5e-3,  'Stokes'],
+      [0.13,  3e-4,  'Linear (Airy)'],
     ];
     let s = `<g clip-path="url(#plot-clip)" font-size="10" fill="#333" font-style="italic" text-anchor="middle" dominant-baseline="middle">`;
     for (const [xv, yv, txt] of labels) {
