@@ -15,7 +15,8 @@
   /* Wave theory colors */
   --color-theory-linear:   #1565c0;
   --color-theory-stokes2:  #2e7d32;
-  --color-theory-stokes34: #e65100;
+  --color-theory-stokes3:  #e65100;
+  --color-theory-stokes4:  #4e342e;
   --color-theory-cnoidal:  #6a1b9a;
   --color-theory-solitary: #795548;
   --color-theory-breaking: #c62828;
@@ -321,7 +322,8 @@ main {
 
 .theory-badge[data-theory="linear"]   { --_theory-color: var(--color-theory-linear); }
 .theory-badge[data-theory="stokes2"]  { --_theory-color: var(--color-theory-stokes2); }
-.theory-badge[data-theory="stokes34"] { --_theory-color: var(--color-theory-stokes34); }
+.theory-badge[data-theory="stokes3"]  { --_theory-color: var(--color-theory-stokes3); }
+.theory-badge[data-theory="stokes4"]  { --_theory-color: var(--color-theory-stokes4); }
 .theory-badge[data-theory="cnoidal"]  { --_theory-color: var(--color-theory-cnoidal); }
 .theory-badge[data-theory="solitary"] { --_theory-color: var(--color-theory-solitary); }
 .theory-badge[data-theory="breaking"] { --_theory-color: var(--color-theory-breaking); }

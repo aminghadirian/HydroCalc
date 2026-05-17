@@ -70,8 +70,9 @@ function classifyWaveTheory(H, k, L, d) {
 
   // Stokes regime: intermediate to deep water, Ursell number small
   if (dOverL > 0.05 && Ur <= 26) {
-    if (HOverL > 0.04)  return 'stokes34';
-    if (HOverL > 0.006) return 'stokes2';
+    if (HOverL > 0.04)  return 'stokes4';
+    if (HOverL > 0.006) return 'stokes3';
+    if (HOverL > 0.001) return 'stokes2';
     return 'linear';
   }
 
@@ -127,7 +128,8 @@ const BADGE_LABELS = {
 const THEORY_COLORS = {
   linear:   '#1565c0',
   stokes2:  '#2e7d32',
-  stokes34: '#e65100',
+  stokes3:  '#e65100',
+  stokes4:  '#4e342e',
   cnoidal:  '#6a1b9a',
   solitary: '#795548',
   breaking: '#c62828',
@@ -136,7 +138,8 @@ const THEORY_COLORS = {
 const THEORY_LABELS = {
   linear:   'Linear (Airy)',
   stokes2:  'Stokes 2nd Order',
-  stokes34: 'Stokes 3rd/4th Order',
+  stokes3:  'Stokes 3rd Order',
+  stokes4:  'Stokes 4th Order',
   cnoidal:  'Cnoidal Wave',
   solitary: 'Solitary Wave',
   breaking: 'Breaking Wave',
@@ -198,15 +201,14 @@ function showResults(props) {
 
 // ── Le Méhaut SVG builder ─────────────────────────────────────────────────
 function buildLeMehautSVG(userX, userY, theory) {
-  // Viewport and plot margins (SVG coordinate units)
-  const VW = 560, VH = 400;
+  const VW = 560, VH = 420;
   const ML = 65, MT = 20, MR = 540, MB = 345;
-  const PW = MR - ML;   // 475
-  const PH = MB - MT;   // 325
+  const PW = MR - ML;
+  const PH = MB - MT;
 
-  // Log₁₀ axis limits
-  const XMIN = -3,    XMAX = Math.log10(0.5);    // d/gT²: 0.001 → 0.5
-  const YMIN = -5.3,  YMAX = Math.log10(0.07);   // H/gT²: 5e-6  → 0.07
+  // Log₁₀ axis limits matching reference: X 0.001→0.2, Y 5e-5→0.05
+  const XMIN = -3,                   XMAX = Math.log10(0.2);
+  const YMIN = Math.log10(5e-5),     YMAX = Math.log10(0.05);
 
   function toSVG(domX, domY) {
     if (domX <= 0 || domY <= 0) return null;
@@ -218,52 +220,76 @@ function buildLeMehautSVG(userX, userY, theory) {
     return [px, py];
   }
 
-  // Compute boundary curves (150 log-spaced x values, T_ref = 1 s)
-  const N = 150;
+  // Compute all boundary curves (200 log-spaced x values, T_ref = 1 s)
+  const N = 200;
+  const xVals       = [];
+  const lambdaVals  = [];
   const michePts    = [];
   const mccowanPts  = [];
   const ur26Pts     = [];
-  const linSt2Pts   = [];
-  const st23Pts     = [];
-  const breakEnvPts = [];   // min(Miche, McCowan) for red fill polygon
+  const linSt2Pts   = [];   // H/L = 0.001  (Linear / Stokes 2nd boundary)
+  const st23Pts     = [];   // H/L = 0.006  (Stokes 2nd / 3rd boundary)
+  const st34Pts     = [];   // H/L = 0.04   (Stokes 3rd / 4th boundary)
+  const breakEnvPts = [];   // min(Miche, McCowan) for polygon fills
 
   for (let i = 0; i < N; i++) {
     const logX  = XMIN + i / (N - 1) * (XMAX - XMIN);
     const x     = Math.pow(10, logX);
-    const d_ref = x * G;   // T_ref = 1 → gT² = G·1² = G
+    const d_ref = x * G;
 
     let lambda, kd_ref, tanh_kd;
     try {
       const { k } = solveDispersion(1, d_ref);
-      lambda   = (TWO_PI / k) / G;   // L / gT²
-      kd_ref   = k * d_ref;
-      tanh_kd  = Math.tanh(kd_ref);
+      lambda  = (TWO_PI / k) / G;
+      kd_ref  = k * d_ref;
+      tanh_kd = Math.tanh(kd_ref);
     } catch (_) {
-      michePts.push(null);
-      mccowanPts.push([x, 0.78 * x]);
-      ur26Pts.push(null);
-      linSt2Pts.push(null);
-      st23Pts.push(null);
+      xVals.push(x); lambdaVals.push(null);
+      michePts.push(null); mccowanPts.push(null);
+      ur26Pts.push(null); linSt2Pts.push(null);
+      st23Pts.push(null); st34Pts.push(null);
       breakEnvPts.push(null);
       continue;
     }
 
+    xVals.push(x); lambdaVals.push(lambda);
+
     const yMiche    = 0.142 * tanh_kd * lambda;
     const yMcCowan  = 0.78 * x;
     const yUr26     = (lambda > 0) ? 26 * x * x * x / (lambda * lambda) : NaN;
-    const yLinSt2   = 0.006 * lambda;
-    const ySt23     = 0.04  * lambda;
-    const yBreakEnv = Math.min(yMiche, yMcCowan);
+    const yBreakEff = Math.min(yMiche, yMcCowan);
+    const yLinSt2   = 0.001 * lambda;
+    const ySt23     = 0.006 * lambda;
+    const ySt34     = 0.04  * lambda;
 
-    michePts.push(isFinite(yMiche)    ? [x, yMiche]    : null);
+    michePts.push(isFinite(yMiche)   ? [x, yMiche]   : null);
     mccowanPts.push([x, yMcCowan]);
-    ur26Pts.push(isFinite(yUr26)      ? [x, yUr26]     : null);
-    linSt2Pts.push(isFinite(yLinSt2)  ? [x, yLinSt2]   : null);
-    st23Pts.push(isFinite(ySt23)      ? [x, ySt23]      : null);
-    breakEnvPts.push(isFinite(yBreakEnv) ? [x, yBreakEnv] : null);
+    // Clip Ur=26 and Stokes curves at breaking envelope
+    ur26Pts.push((isFinite(yUr26)   && yUr26   < yBreakEff) ? [x, yUr26]   : null);
+    linSt2Pts.push((isFinite(yLinSt2) && yLinSt2 < yBreakEff) ? [x, yLinSt2] : null);
+    st23Pts.push((isFinite(ySt23)   && ySt23   < yBreakEff) ? [x, ySt23]   : null);
+    st34Pts.push((isFinite(ySt34)   && ySt34   < yBreakEff) ? [x, ySt34]   : null);
+    breakEnvPts.push(isFinite(yBreakEff) ? [x, yBreakEff] : null);
   }
 
-  // Build one or more <polyline> elements; splits on null entries (gaps)
+  // Find x-values where d/L crosses 0.5 (deep/intermediate) and 0.05 (intermediate/shallow)
+  // d/L = d_ref / (lambda * G) = x / lambda  (since d_ref = x*G, lambda = L/G)
+  let xDeepPx = null, xShallowPx = null;
+  for (let i = 0; i < xVals.length - 1; i++) {
+    if (lambdaVals[i] === null || lambdaVals[i + 1] === null) continue;
+    const r0 = xVals[i]     / lambdaVals[i];
+    const r1 = xVals[i + 1] / lambdaVals[i + 1];
+    if (xDeepPx === null && r0 <= 0.5 && r1 >= 0.5) {
+      const svL = toSVG(xVals[i], 1e-3), svR = toSVG(xVals[i + 1], 1e-3);
+      if (svL && svR) xDeepPx = (svL[0] + svR[0]) / 2;
+    }
+    if (xShallowPx === null && r0 <= 0.05 && r1 >= 0.05) {
+      const svL = toSVG(xVals[i], 1e-3), svR = toSVG(xVals[i + 1], 1e-3);
+      if (svL && svR) xShallowPx = (svL[0] + svR[0]) / 2;
+    }
+  }
+
+  // Build polyline(s); null entries create gaps
   function makeCurve(pts, stroke, dasharray, width) {
     const segments = [];
     let current    = [];
@@ -282,7 +308,6 @@ function buildLeMehautSVG(userX, userY, theory) {
       }
     }
     if (current.length >= 2) segments.push(current);
-
     const da = dasharray ? `stroke-dasharray="${dasharray}"` : '';
     return segments.map(seg => {
       const pStr = seg.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
@@ -290,7 +315,86 @@ function buildLeMehautSVG(userX, userY, theory) {
     }).join('');
   }
 
-  // Red fill polygon for breaking zone (above effective breaking envelope)
+  // ── Shaded regions ────────────────────────────────────────────────────────
+
+  // Linear theory region: below linSt2 (deep/intermediate) or below Ur=26 (shallow)
+  // Built as a closed polygon tracing bottom edge then along dividing curve
+  function linearFill() {
+    // Collect valid linSt2 SVG points (already clipped at breaking)
+    const upper = [];
+    for (const pt of linSt2Pts) {
+      if (pt === null) continue;
+      const sv = toSVG(pt[0], pt[1]);
+      if (sv) upper.push(sv);
+    }
+    // Collect valid ur26 SVG points for the shallow zone
+    const ur26svgPts = [];
+    for (const pt of ur26Pts) {
+      if (pt === null) continue;
+      const sv = toSVG(pt[0], pt[1]);
+      if (sv) ur26svgPts.push(sv);
+    }
+    if (upper.length < 2 && ur26svgPts.length < 2) return '';
+
+    // Bottom corners of the plot
+    const botLeft  = [ML, MB];
+    const botRight = [MR, MB];
+
+    // Right portion: below linSt2 curve (if there is no shallow cutoff, use full width)
+    // We build: bottom-left → bottom-right → up right edge to linSt2 right end
+    //          → follow linSt2 right-to-left → at xShallow junction switch to ur26
+    //          → follow ur26 left-to-right is wrong; we need the left part separately.
+    // Simpler: two sub-polygons.
+
+    let s = '';
+
+    // Deep/intermediate sub-polygon (right of xShallow or full if no xShallow)
+    if (upper.length >= 2) {
+      const pts = [botLeft, botRight, ...upper.slice().reverse()];
+      const pStr = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+      s += `<polygon points="${pStr}" fill="#90a4ae" opacity="0.35" clip-path="url(#plot-clip)"/>`;
+    }
+
+    // Shallow sub-polygon (left of Ur=26 curve, above Ur=26)
+    if (ur26svgPts.length >= 2) {
+      const leftX  = ML;
+      const rightX = ur26svgPts[ur26svgPts.length - 1][0];
+      const pts = [
+        [leftX, MB], [rightX, MB],
+        ...ur26svgPts.slice().reverse(),
+      ];
+      const pStr = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+      s += `<polygon points="${pStr}" fill="#90a4ae" opacity="0.35" clip-path="url(#plot-clip)"/>`;
+    }
+
+    return s;
+  }
+
+  // Cnoidal region: between Ur=26 and breaking envelope
+  function cnoidalFill() {
+    const ur26svg = [];
+    for (const pt of ur26Pts) {
+      if (pt === null) continue;
+      const sv = toSVG(pt[0], pt[1]);
+      if (sv) ur26svg.push(sv);
+    }
+    const envSVG = [];
+    for (const pt of breakEnvPts) {
+      if (pt === null) continue;
+      const sv = toSVG(pt[0], pt[1]);
+      if (sv) envSVG.push(sv);
+    }
+    if (ur26svg.length < 2 || envSVG.length < 2) return '';
+    // Trace: ur26 left-to-right, then breaking envelope right-to-left (clipped)
+    // We only want the portion left of where Ur=26 exists
+    const maxX = ur26svg[ur26svg.length - 1][0];
+    const envClipped = envSVG.filter(p => p[0] <= maxX + 1);
+    const pts = [...ur26svg, ...envClipped.slice().reverse()];
+    const pStr = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+    return `<polygon points="${pStr}" fill="#b0bec5" opacity="0.3" clip-path="url(#plot-clip)"/>`;
+  }
+
+  // Breaking zone: above effective breaking envelope
   function breakingPolygon() {
     const envSVG = [];
     for (const pt of breakEnvPts) {
@@ -299,29 +403,47 @@ function buildLeMehautSVG(userX, userY, theory) {
       if (sv) envSVG.push(sv);
     }
     if (envSVG.length < 2) return '';
-    // Polygon: top-left → top-right → breaking curve right-to-left → close
-    const pts = [
-      [ML, MT], [MR, MT],
-      ...envSVG.slice().reverse(),
-    ];
+    const pts = [[ML, MT], [MR, MT], ...envSVG.slice().reverse()];
     const pStr = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
     return `<polygon points="${pStr}" fill="#ffcdd2" opacity="0.55" clip-path="url(#plot-clip)"/>`;
+  }
+
+  // Vertical depth classification lines
+  function depthLines() {
+    let s = '';
+    if (xDeepPx !== null) {
+      s += `<line x1="${xDeepPx.toFixed(1)}" y1="${MT}" x2="${xDeepPx.toFixed(1)}" y2="${MB}" stroke="#555" stroke-width="0.8" stroke-dasharray="5,4" clip-path="url(#plot-clip)"/>`;
+    }
+    if (xShallowPx !== null) {
+      s += `<line x1="${xShallowPx.toFixed(1)}" y1="${MT}" x2="${xShallowPx.toFixed(1)}" y2="${MB}" stroke="#555" stroke-width="0.8" stroke-dasharray="5,4" clip-path="url(#plot-clip)"/>`;
+    }
+    // Zone labels below x-axis
+    const ly = MB + 28;
+    if (xDeepPx !== null && xShallowPx !== null) {
+      const deepMid = ((xDeepPx + MR) / 2).toFixed(1);
+      const intMid  = ((xDeepPx + xShallowPx) / 2).toFixed(1);
+      const shalMid = ((ML + xShallowPx) / 2).toFixed(1);
+      s += `<text x="${deepMid}" y="${ly}" text-anchor="middle" font-size="9" fill="#555">deep</text>`;
+      s += `<text x="${intMid}"  y="${ly}" text-anchor="middle" font-size="9" fill="#555">intermediate</text>`;
+      s += `<text x="${shalMid}" y="${ly}" text-anchor="middle" font-size="9" fill="#555">shallow</text>`;
+    }
+    return s;
   }
 
   // Log-decade grid lines
   function grid() {
     const xGridVals = [0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008, 0.009,
-                       0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09,
-                       0.1, 0.2, 0.3, 0.4, 0.5];
-    const yGridVals = [5e-6, 1e-5, 2e-5, 3e-5, 4e-5, 5e-5, 6e-5, 7e-5, 8e-5, 9e-5,
+                       0.01,  0.02,  0.03,  0.04,  0.05,  0.06,  0.07,  0.08,  0.09,
+                       0.1,   0.2];
+    const yGridVals = [5e-5, 6e-5, 7e-5, 8e-5, 9e-5,
                        1e-4, 2e-4, 3e-4, 4e-4, 5e-4, 6e-4, 7e-4, 8e-4, 9e-4,
                        1e-3, 2e-3, 3e-3, 4e-3, 5e-3, 6e-3, 7e-3, 8e-3, 9e-3,
-                       1e-2, 2e-2, 3e-2, 4e-2, 5e-2, 6e-2, 7e-2];
+                       1e-2, 2e-2, 3e-2, 4e-2, 5e-2];
     let g = '';
     for (const xv of xGridVals) {
       const sv = toSVG(xv, 1e-3);
       if (!sv) continue;
-      const isDec = Number.isInteger(Math.log10(xv));
+      const isDec = Number.isInteger(Math.round(Math.log10(xv) * 1000) / 1000);
       g += `<line x1="${sv[0].toFixed(1)}" y1="${MT}" x2="${sv[0].toFixed(1)}" y2="${MB}" stroke="#e2e8f0" stroke-width="${isDec ? 0.8 : 0.4}" clip-path="url(#plot-clip)"/>`;
     }
     for (const yv of yGridVals) {
@@ -334,17 +456,11 @@ function buildLeMehautSVG(userX, userY, theory) {
     return g;
   }
 
-  // Axis tick marks and labels
+  // Axis ticks and labels
   function axes() {
     let s = '';
-
-    // X-axis — major ticks with labels
-    const xMajor = [
-      [0.001, '10⁻³'], [0.01, '10⁻²'], [0.1, '10⁻¹'],
-    ];
-    // X-axis — minor ticks without labels (intermediate decades)
-    const xMinor = [0.002, 0.005, 0.02, 0.05, 0.2, 0.5];
-
+    const xMajor = [[0.001, '10⁻³'], [0.01, '10⁻²'], [0.1, '10⁻¹']];
+    const xMinor = [0.002, 0.005, 0.02, 0.05, 0.2];
     for (const [xv, lbl] of xMajor) {
       const sv = toSVG(xv, 1e-3);
       if (!sv) continue;
@@ -355,17 +471,10 @@ function buildLeMehautSVG(userX, userY, theory) {
     for (const xv of xMinor) {
       const sv = toSVG(xv, 1e-3);
       if (!sv) continue;
-      const px = sv[0].toFixed(1);
-      s += `<line x1="${px}" y1="${MB}" x2="${px}" y2="${MB + 3}" stroke="#888" stroke-width="0.8"/>`;
+      s += `<line x1="${sv[0].toFixed(1)}" y1="${MB}" x2="${sv[0].toFixed(1)}" y2="${MB + 3}" stroke="#888" stroke-width="0.8"/>`;
     }
-
-    // Y-axis — major ticks with labels
-    const yMajor = [
-      [1e-5, '10⁻⁵'], [1e-4, '10⁻⁴'],
-      [1e-3, '10⁻³'], [1e-2, '10⁻²'],
-    ];
-    const yMinor = [5e-6, 5e-5, 5e-4, 5e-3, 5e-2];
-
+    const yMajor = [[1e-4, '10⁻⁴'], [1e-3, '10⁻³'], [1e-2, '10⁻²']];
+    const yMinor = [5e-5, 5e-4, 5e-3, 5e-2];
     for (const [yv, lbl] of yMajor) {
       const sv = toSVG(0.01, yv);
       if (!sv) continue;
@@ -376,31 +485,27 @@ function buildLeMehautSVG(userX, userY, theory) {
     for (const yv of yMinor) {
       const sv = toSVG(0.01, yv);
       if (!sv) continue;
-      const py = sv[1].toFixed(1);
-      s += `<line x1="${ML - 3}" y1="${py}" x2="${ML}" y2="${py}" stroke="#888" stroke-width="0.8"/>`;
+      s += `<line x1="${ML - 3}" y1="${sv[1].toFixed(1)}" x2="${ML}" y2="${sv[1].toFixed(1)}" stroke="#888" stroke-width="0.8"/>`;
     }
-
-    // Axis title labels
     const cx = ((ML + MR) / 2).toFixed(1);
     const cy = ((MT + MB) / 2).toFixed(1);
     s += `<text x="${cx}" y="${VH - 3}" text-anchor="middle" font-size="12" font-style="italic" fill="#333">d / gT²</text>`;
     s += `<text x="13" y="${cy}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-style="italic" fill="#333" transform="rotate(-90,13,${cy})">H / gT²</text>`;
-
     return s;
   }
 
-  // Region text labels — domain coordinates chosen to sit inside each zone
+  // Region text labels
   function regionLabels() {
     const labels = [
-      // [domX, domY, text]
-      [0.05,  1.5e-5, 'Linear (Airy)'],
-      [0.05,  3e-3,   'Stokes 2ⁿᵈ'],
-      [0.04,  8e-3,   'Stokes 3ʳᵈ– 4ᵗʰ'],
-      [0.005, 2e-3,   'Cnoidal'],
-      [0.002, 1.2e-3, 'Solitary'],
-      [0.02,  0.015,  'Breaking'],
+      [0.07, 6e-5,  'Linear (Airy)'],
+      [0.07, 3e-4,  'Stokes 2ⁿᵈ'],
+      [0.07, 2e-3,  'Stokes 3ʳᵈ'],
+      [0.07, 1.2e-2,'Stokes 4ᵗʰ'],
+      [0.004, 5e-4, 'Cnoidal'],
+      [0.0015,8e-4, 'Solitary'],
+      [0.015, 0.03, 'Breaking'],
     ];
-    let s = `<g clip-path="url(#plot-clip)" font-size="10" fill="#444" font-style="italic" text-anchor="middle" dominant-baseline="middle">`;
+    let s = `<g clip-path="url(#plot-clip)" font-size="10" fill="#333" font-style="italic" text-anchor="middle" dominant-baseline="middle">`;
     for (const [xv, yv, txt] of labels) {
       const sv = toSVG(xv, yv);
       if (!sv) continue;
@@ -410,25 +515,24 @@ function buildLeMehautSVG(userX, userY, theory) {
     return s;
   }
 
-  // Legend — placed upper-left with white background for readability
+  // Legend
   function legend() {
     const items = [
       ['#c62828', '',    'Miche (1951) breaking'],
       ['#e65100', '6,3', 'McCowan  H/d = 0.78'],
       ['#6a1b9a', '5,3', 'Ursell  Ur = 26'],
       ['#1565c0', '4,3', 'Linear / Stokes 2ⁿᵈ'],
-      ['#00695c', '4,3', 'Stokes 2ⁿᵈ / 3ʳᵈ–4ᵗʰ'],
+      ['#2e7d32', '4,3', 'Stokes 2ⁿᵈ / 3ʳᵈ'],
+      ['#e65100', '4,3', 'Stokes 3ʳᵈ / 4ᵗʰ'],
     ];
-    const LX = ML + 5;
-    const LY = MT + 8;
-    const LW = 162;
-    const LH = items.length * 14 + 8;
+    const LX = ML + 5, LY = MT + 8;
+    const LW = 170, LH = items.length * 14 + 8;
     let s = `<rect x="${LX - 3}" y="${LY - 5}" width="${LW}" height="${LH}" fill="white" fill-opacity="0.90" rx="3" stroke="#ddd" stroke-width="0.5"/>`;
     items.forEach(([color, dash, lbl], i) => {
       const ly = LY + 8 + i * 14;
       const da = dash ? `stroke-dasharray="${dash}"` : '';
       s += `<line x1="${LX}" y1="${ly}" x2="${LX + 20}" y2="${ly}" stroke="${color}" stroke-width="1.8" ${da}/>`;
-      s += `<text x="${LX + 24}" y="${ly}" dominant-baseline="middle" font-size="9" fill="#333" font-style="normal">${lbl}</text>`;
+      s += `<text x="${LX + 24}" y="${ly}" dominant-baseline="middle" font-size="9" fill="#333">${lbl}</text>`;
     });
     return s;
   }
@@ -439,7 +543,7 @@ function buildLeMehautSVG(userX, userY, theory) {
     const sv = toSVG(userX, userY);
     if (!sv) return '';
     const [ux, uy] = [sv[0].toFixed(1), sv[1].toFixed(1)];
-    const color = THEORY_COLORS[theory];
+    const color = THEORY_COLORS[theory] || '#333';
     return `<g clip-path="url(#plot-clip)">
       <line x1="${ux}" y1="${MT}" x2="${ux}" y2="${MB}" stroke="${color}" stroke-width="0.9" stroke-dasharray="3,3" opacity="0.65"/>
       <line x1="${ML}" y1="${uy}" x2="${MR}" y2="${uy}" stroke="${color}" stroke-width="0.9" stroke-dasharray="3,3" opacity="0.65"/>
@@ -447,7 +551,6 @@ function buildLeMehautSVG(userX, userY, theory) {
     </g>`;
   }
 
-  // Axis border rect — drawn last so it sits on top of all content
   function border() {
     return `<rect x="${ML}" y="${MT}" width="${PW}" height="${PH}" fill="none" stroke="#555" stroke-width="1.5"/>`;
   }
@@ -459,13 +562,17 @@ function buildLeMehautSVG(userX, userY, theory) {
     </clipPath>
   </defs>
   <rect x="${ML}" y="${MT}" width="${PW}" height="${PH}" fill="#fff"/>
+  ${linearFill()}
+  ${cnoidalFill()}
   ${breakingPolygon()}
   ${grid()}
   ${makeCurve(michePts,   '#c62828', '',    1.8)}
   ${makeCurve(mccowanPts, '#e65100', '6,3', 1.5)}
   ${makeCurve(ur26Pts,    '#6a1b9a', '5,3', 1.5)}
   ${makeCurve(linSt2Pts,  '#1565c0', '4,3', 1.3)}
-  ${makeCurve(st23Pts,    '#00695c', '4,3', 1.3)}
+  ${makeCurve(st23Pts,    '#2e7d32', '4,3', 1.3)}
+  ${makeCurve(st34Pts,    '#e65100', '4,3', 1.3)}
+  ${depthLines()}
   ${axes()}
   ${regionLabels()}
   ${legend()}
