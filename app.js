@@ -67,20 +67,22 @@ function classifyWaveTheory(H, k, L, d) {
   // Breaking — McCowan (shallow water)
   if (HOverd >= 0.78 && dOverL <= 0.05) return 'breaking';
 
-  // Ur₀ uses deep-water wavelength L₀ = L/tanh(kd), matching the diagram's slope-3 lines
+  // Ur₀ = H·L₀²/d³ using deep-water wavelength L₀ = L/tanh(kd)
+  // Matches diagram: U = y/(4π²x³) so any U threshold gives a straight slope-3 line
   const L0  = L / Math.tanh(kd);
   const Ur0 = H * L0 * L0 / (d * d * d);
 
-  // Intermediate to deep: Stokes regime; thresholds match y = 4π²x³, 125x³, 350x³
+  // Intermediate to deep: Stokes regime
+  // U=26 is the diagram's Stokes/Cnoidal boundary; sub-order thresholds are approximate
   if (dOverL > 0.05) {
-    if (Ur0 >= 350 / (4 * Math.PI * Math.PI)) return 'stokes4';
-    if (Ur0 >= 125 / (4 * Math.PI * Math.PI)) return 'stokes3';
-    if (Ur0 >= 1.0)                            return 'stokes2';
+    if (Ur0 >= 26) return 'stokes4';
+    if (Ur0 >= 8)  return 'stokes3';
+    if (Ur0 >= 1)  return 'stokes2';
     return 'linear';
   }
 
-  // Shallow: Cnoidal vs Solitary at H/d = 0.45 (matches y = 0.45x boundary)
-  if (HOverd >= 0.45) return 'solitary';
+  // Shallow: rough engineering split between solitary and cnoidal
+  if (HOverd >= 0.55) return 'solitary';
   return 'cnoidal';
 }
 
@@ -223,17 +225,22 @@ function buildLeMehautSVG(userX, userY, theory) {
     return [px, py];
   }
 
+  // Depth-regime thresholds from d/L = 0.05 and d/L = 0.5 using L₀ = gT²/(2π):
+  //   h/L = 2πx  →  x = threshold/(2π)
+  const X_SHALLOW = 0.05 / (2 * Math.PI);   // ≈ 0.00796
+  const X_DEEP    = 0.5  / (2 * Math.PI);   // ≈ 0.07958
+
   // Compute all boundary curves (200 log-spaced x values, T_ref = 1 s)
   const N = 200;
   const xVals       = [];
   const lambdaVals  = [];
   const michePts    = [];
   const mccowanPts  = [];
-  const solCnPts    = [];   // y = 0.45x    (Cnoidal / Solitary boundary)
-  const linSt2Pts   = [];   // y = 4π²x³   (Linear / Stokes 2nd, Ur₀ = 1)
-  const st23Pts     = [];   // y = 125x³   (Stokes 2nd / 3rd, Ur₀ ≈ 3.16)
-  const st34Pts     = [];   // y = 350x³   (Stokes 3rd / V, Ur₀ ≈ 8.87)
+  const ur26Pts     = [];   // y = 26·4π²·x³ ≈ 1027x³  (Ursell U=26, Stokes/Cnoidal boundary)
+  const linSt2Pts   = [];   // piecewise: y = 4π²x³ (shallow/intermediate) | y ≈ 0.000955 (deep)
   const breakEnvPts = [];   // min(Miche, McCowan) for polygon fills
+
+  let prevX = null;   // used to detect the shallow→deep crossing for linSt2 gap insertion
 
   for (let i = 0; i < N; i++) {
     const logX  = XMIN + i / (N - 1) * (XMAX - XMIN);
@@ -249,9 +256,9 @@ function buildLeMehautSVG(userX, userY, theory) {
     } catch (_) {
       xVals.push(x); lambdaVals.push(null);
       michePts.push(null); mccowanPts.push(null);
-      solCnPts.push(null); linSt2Pts.push(null);
-      st23Pts.push(null); st34Pts.push(null);
+      ur26Pts.push(null); linSt2Pts.push(null);
       breakEnvPts.push(null);
+      prevX = x;
       continue;
     }
 
@@ -260,25 +267,31 @@ function buildLeMehautSVG(userX, userY, theory) {
     const yMiche    = 0.142 * tanh_kd * lambda;
     const yMcCowan  = 0.78 * x;
     const yBreakEff = Math.min(yMiche, yMcCowan);
-    // Analytical straight-line boundaries (slope-3 on log-log via Ur₀; slope-1 for solitary)
-    const yLinSt2   = 4 * Math.PI * Math.PI * x * x * x;  // Ur₀ = 1
-    const ySt23     = 125 * x * x * x;                     // Ur₀ ≈ 3.16
-    const ySt34     = 350 * x * x * x;                     // Ur₀ ≈ 8.87
-    const ySolCn    = 0.45 * x;                            // Cnoidal / Solitary
+
+    // Stokes/Cnoidal boundary: Ursell U = 26 using deep-water L₀  →  y = U·(2π)²·x³
+    const yUr26 = 26 * 4 * Math.PI * Math.PI * x * x * x;
+
+    // Linear/Stokes 2nd boundary — PIECEWISE (reference spec §5–7):
+    //   x < X_DEEP: shallow/intermediate water → Ursell U=1 cubic  y = (2π)²·x³
+    //   x ≥ X_DEEP: deep water → steepness H/L₀ ≈ 0.006  →  y = 0.006/(2π) ≈ 0.000955
+    // A null is inserted when x first crosses X_DEEP so makeCurve draws two separate segments.
+    if (prevX !== null && prevX < X_DEEP && x >= X_DEEP) linSt2Pts.push(null);
+    const yLinSt2 = (x < X_DEEP)
+        ? 4 * Math.PI * Math.PI * x * x * x
+        : 0.006 / (2 * Math.PI);
 
     michePts.push(isFinite(yMiche)   ? [x, yMiche]   : null);
     mccowanPts.push([x, yMcCowan]);
-    // Clip internal curves at breaking envelope
-    solCnPts.push((isFinite(ySolCn)   && ySolCn   < yBreakEff) ? [x, ySolCn]   : null);
-    linSt2Pts.push((isFinite(yLinSt2) && yLinSt2  < yBreakEff) ? [x, yLinSt2]  : null);
-    st23Pts.push((isFinite(ySt23)     && ySt23    < yBreakEff) ? [x, ySt23]    : null);
-    st34Pts.push((isFinite(ySt34)     && ySt34    < yBreakEff) ? [x, ySt34]    : null);
+    ur26Pts.push((isFinite(yUr26)   && yUr26   < yBreakEff) ? [x, yUr26]   : null);
+    linSt2Pts.push((isFinite(yLinSt2) && yLinSt2 < yBreakEff) ? [x, yLinSt2] : null);
     breakEnvPts.push(isFinite(yBreakEff) ? [x, yBreakEff] : null);
+
+    prevX = x;
   }
 
-  // Analytical depth boundaries: d/L = 0.5 → x ≈ 0.08 (deep); d/L = 0.05 → x ≈ 0.0025 (shallow)
-  const _svDeep    = toSVG(0.08,   1e-3);
-  const _svShallow = toSVG(0.0025, 1e-3);
+  // SVG pixel positions of the depth regime vertical lines
+  const _svDeep    = toSVG(X_DEEP,    1e-3);
+  const _svShallow = toSVG(X_SHALLOW, 1e-3);
   const xDeepPx    = _svDeep    ? _svDeep[0]    : null;
   const xShallowPx = _svShallow ? _svShallow[0] : null;
 
@@ -324,13 +337,13 @@ function buildLeMehautSVG(userX, userY, theory) {
     return `<polygon points="${pStr}" fill="#90a4ae" opacity="0.35" clip-path="url(#plot-clip)"/>`;
   }
 
-  // Cnoidal region: between y = 0.45x (solCnPts) and the breaking envelope (shallow zone)
+  // Cnoidal region: above Ursell U=26 curve and below breaking envelope (shallow zone)
   function cnoidalFill() {
-    const solSVG = [];
-    for (const pt of solCnPts) {
+    const urSVG = [];
+    for (const pt of ur26Pts) {
       if (pt === null) continue;
       const sv = toSVG(pt[0], pt[1]);
-      if (sv) solSVG.push(sv);
+      if (sv) urSVG.push(sv);
     }
     const envSVG = [];
     for (const pt of breakEnvPts) {
@@ -338,10 +351,10 @@ function buildLeMehautSVG(userX, userY, theory) {
       const sv = toSVG(pt[0], pt[1]);
       if (sv) envSVG.push(sv);
     }
-    if (solSVG.length < 2 || envSVG.length < 2) return '';
-    const maxX = solSVG[solSVG.length - 1][0];
+    if (urSVG.length < 2 || envSVG.length < 2) return '';
+    const maxX = urSVG[urSVG.length - 1][0];
     const envClipped = envSVG.filter(p => p[0] <= maxX + 1);
-    const pts = [...solSVG, ...envClipped.slice().reverse()];
+    const pts = [...urSVG, ...envClipped.slice().reverse()];
     const pStr = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
     return `<polygon points="${pStr}" fill="#b0bec5" opacity="0.3" clip-path="url(#plot-clip)"/>`;
   }
@@ -449,13 +462,11 @@ function buildLeMehautSVG(userX, userY, theory) {
   // Region text labels
   function regionLabels() {
     const labels = [
-      [0.07, 6e-5,  'Linear (Airy)'],
-      [0.07, 3e-4,  'Stokes 2ⁿᵈ'],
-      [0.07, 2e-3,  'Stokes 3ʳᵈ'],
-      [0.07, 1.2e-2,'Stokes 4ᵗʰ'],
-      [0.004, 5e-4, 'Cnoidal'],
-      [0.0015,8e-4, 'Solitary'],
-      [0.015, 0.03, 'Breaking'],
+      [0.07,  6e-5,  'Linear (Airy)'],
+      [0.05,  5e-3,  'Stokes'],
+      [0.004, 2e-3,  'Cnoidal'],
+      [0.0018,3e-3,  'Solitary'],
+      [0.015, 0.03,  'Breaking'],
     ];
     let s = `<g clip-path="url(#plot-clip)" font-size="10" fill="#333" font-style="italic" text-anchor="middle" dominant-baseline="middle">`;
     for (const [xv, yv, txt] of labels) {
@@ -472,13 +483,11 @@ function buildLeMehautSVG(userX, userY, theory) {
     const items = [
       ['#c62828', '',    'Miche (1951) breaking'],
       ['#e65100', '6,3', 'McCowan  H/d = 0.78'],
-      ['#6a1b9a', '5,3', 'Cnoidal / Solitary  y = 0.45x'],
-      ['#1565c0', '4,3', 'Linear / Stokes 2ⁿᵈ  (Uᵣ = 1)'],
-      ['#2e7d32', '4,3', 'Stokes 2ⁿᵈ / 3ʳᵈ  (Uᵣ ≈ 3.2)'],
-      ['#ad1457', '4,3', 'Stokes 3ʳᵈ / V  (Uᵣ ≈ 8.9)'],
+      ['#6a1b9a', '5,3', 'Ursell  U = 26  (Stokes / Cnoidal)'],
+      ['#1565c0', '4,3', 'Linear limit  (U=1 / H·L₀⁻¹≈0.006)'],
     ];
     const LX = ML + 5, LY = MT + 8;
-    const LW = 200, LH = items.length * 14 + 8;
+    const LW = 210, LH = items.length * 14 + 8;
     let s = `<rect x="${LX - 3}" y="${LY - 5}" width="${LW}" height="${LH}" fill="white" fill-opacity="0.90" rx="3" stroke="#ddd" stroke-width="0.5"/>`;
     items.forEach(([color, dash, lbl], i) => {
       const ly = LY + 8 + i * 14;
@@ -520,10 +529,8 @@ function buildLeMehautSVG(userX, userY, theory) {
   ${grid()}
   ${makeCurve(michePts,   '#c62828', '',    1.8)}
   ${makeCurve(mccowanPts, '#e65100', '6,3', 1.5)}
-  ${makeCurve(solCnPts,   '#6a1b9a', '5,3', 1.5)}
+  ${makeCurve(ur26Pts,    '#6a1b9a', '5,3', 1.5)}
   ${makeCurve(linSt2Pts,  '#1565c0', '4,3', 1.3)}
-  ${makeCurve(st23Pts,    '#2e7d32', '4,3', 1.3)}
-  ${makeCurve(st34Pts,    '#ad1457', '4,3', 1.3)}
   ${depthLines()}
   ${axes()}
   ${regionLabels()}
