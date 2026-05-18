@@ -225,9 +225,10 @@ function buildLeMehautSVG(userX, userY, theory) {
     return [px, py];
   }
 
-  // Depth-regime thresholds from d/L = 0.05 and d/L = 0.5 using L₀ = gT²/(2π):
-  //   h/L = 2πx  →  x = threshold/(2π)
-  const X_SHALLOW = 0.05 / (2 * Math.PI);   // ≈ 0.00796
+  // Depth-regime thresholds:
+  //   X_SHALLOW: d/L = 0.05 using shallow-water L = T√(gd) → x = 0.0025
+  //   X_DEEP:    d/L = 0.5  using deep-water   L = gT²/(2π) → x = 0.5/(2π) ≈ 0.07958
+  const X_SHALLOW = 0.0025;
   const X_DEEP    = 0.5  / (2 * Math.PI);   // ≈ 0.07958
 
   // Compute all boundary curves (200 log-spaced x values, T_ref = 1 s)
@@ -236,11 +237,9 @@ function buildLeMehautSVG(userX, userY, theory) {
   const lambdaVals  = [];
   const michePts    = [];
   const mccowanPts  = [];
-  const ur26Pts     = [];   // y = 26·4π²·x³ ≈ 1027x³  (Ursell U=26, Stokes/Cnoidal boundary)
-  const linSt2Pts   = [];   // piecewise: y = 4π²x³ (shallow/intermediate) | y ≈ 0.000955 (deep)
+  const ur26Pts     = [];   // Ursell U=26 using actual L from dispersion (Stokes/Cnoidal boundary)
+  const linSt2Pts   = [];   // deep-water steepness limit: H/L₀ ≈ 0.006  →  y ≈ 0.000955
   const breakEnvPts = [];   // min(Miche, McCowan) for polygon fills
-
-  let prevX = null;   // used to detect the shallow→deep crossing for linSt2 gap insertion
 
   for (let i = 0; i < N; i++) {
     const logX  = XMIN + i / (N - 1) * (XMAX - XMIN);
@@ -258,7 +257,6 @@ function buildLeMehautSVG(userX, userY, theory) {
       michePts.push(null); mccowanPts.push(null);
       ur26Pts.push(null); linSt2Pts.push(null);
       breakEnvPts.push(null);
-      prevX = x;
       continue;
     }
 
@@ -268,25 +266,17 @@ function buildLeMehautSVG(userX, userY, theory) {
     const yMcCowan  = 0.78 * x;
     const yBreakEff = Math.min(yMiche, yMcCowan);
 
-    // Stokes/Cnoidal boundary: Ursell U = 26 using deep-water L₀  →  y = U·(2π)²·x³
-    const yUr26 = 26 * 4 * Math.PI * Math.PI * x * x * x;
+    // Stokes/Cnoidal boundary: Ursell U = H·L²/d³ = y·λ²/x³ = 26  →  y = 26·x³/λ²
+    const yUr26 = 26 * x * x * x / (lambda * lambda);
 
-    // Linear/Stokes 2nd boundary — PIECEWISE (reference spec §5–7):
-    //   x < X_DEEP: shallow/intermediate water → Ursell U=1 cubic  y = (2π)²·x³
-    //   x ≥ X_DEEP: deep water → steepness H/L₀ ≈ 0.006  →  y = 0.006/(2π) ≈ 0.000955
-    // A null is inserted when x first crosses X_DEEP so makeCurve draws two separate segments.
-    if (prevX !== null && prevX < X_DEEP && x >= X_DEEP) linSt2Pts.push(null);
-    const yLinSt2 = (x < X_DEEP)
-        ? 4 * Math.PI * Math.PI * x * x * x
-        : 0.006 / (2 * Math.PI);
+    // Linear theory upper limit (deep water only): H/L₀ ≈ 0.006  →  y = 0.006/(2π) ≈ 0.000955
+    const yLinSt2 = (x >= X_DEEP) ? 0.006 / (2 * Math.PI) : null;
 
     michePts.push(isFinite(yMiche)   ? [x, yMiche]   : null);
     mccowanPts.push([x, yMcCowan]);
     ur26Pts.push((isFinite(yUr26)   && yUr26   < yBreakEff) ? [x, yUr26]   : null);
-    linSt2Pts.push((isFinite(yLinSt2) && yLinSt2 < yBreakEff) ? [x, yLinSt2] : null);
+    linSt2Pts.push((yLinSt2 !== null && isFinite(yLinSt2) && yLinSt2 < yBreakEff) ? [x, yLinSt2] : null);
     breakEnvPts.push(isFinite(yBreakEff) ? [x, yBreakEff] : null);
-
-    prevX = x;
   }
 
   // SVG pixel positions of the depth regime vertical lines
@@ -323,39 +313,22 @@ function buildLeMehautSVG(userX, userY, theory) {
 
   // ── Shaded regions ────────────────────────────────────────────────────────
 
-  // Linear (Airy) region — two separate polygons, one per segment of the piecewise curve
+  // Linear (Airy) region — strip below the deep-water steepness limit (y ≈ 0.000955)
   function linearFill() {
-    const cubic = [];   // points before the null gap  (x < X_DEEP, cubic segment)
-    const horiz = [];   // points after the null gap   (x ≥ X_DEEP, horizontal segment)
-    let gapSeen = false;
+    const horiz = [];
     for (const pt of linSt2Pts) {
-      if (pt === null) { gapSeen = true; continue; }
+      if (pt === null) continue;
       const sv = toSVG(pt[0], pt[1]);
-      if (!sv) continue;
-      (gapSeen ? horiz : cubic).push(sv);
+      if (sv) horiz.push(sv);
     }
-    let s = '';
-    // Deep-water fill: strip below the horizontal steepness limit (y ≈ 0.000955)
-    if (horiz.length >= 2) {
-      const pts = [
-        [horiz[0][0], MB],
-        [horiz[horiz.length - 1][0], MB],
-        ...horiz.slice().reverse(),
-      ];
-      const pStr = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
-      s += `<polygon points="${pStr}" fill="#90a4ae" opacity="0.35" clip-path="url(#plot-clip)"/>`;
-    }
-    // Intermediate fill: wedge below the Ur₀=1 cubic (first appears above y-min at x ≈ 0.011)
-    if (cubic.length >= 2) {
-      const pts = [
-        [ML, MB],
-        [cubic[cubic.length - 1][0], MB],
-        ...cubic.slice().reverse(),
-      ];
-      const pStr = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
-      s += `<polygon points="${pStr}" fill="#90a4ae" opacity="0.35" clip-path="url(#plot-clip)"/>`;
-    }
-    return s;
+    if (horiz.length < 2) return '';
+    const pts = [
+      [horiz[0][0], MB],
+      [horiz[horiz.length - 1][0], MB],
+      ...horiz.slice().reverse(),
+    ];
+    const pStr = pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+    return `<polygon points="${pStr}" fill="#90a4ae" opacity="0.35" clip-path="url(#plot-clip)"/>`;
   }
 
   // Cnoidal region: above Ursell U=26 curve and below breaking envelope (shallow zone)
@@ -504,7 +477,7 @@ function buildLeMehautSVG(userX, userY, theory) {
       ['#c62828', '',    'Miche (1951) breaking'],
       ['#e65100', '6,3', 'McCowan  H/d = 0.78'],
       ['#6a1b9a', '5,3', 'Ursell  U = 26  (Stokes / Cnoidal)'],
-      ['#1565c0', '4,3', 'Linear limit  (U=1 / H·L₀⁻¹≈0.006)'],
+      ['#1565c0', '4,3', 'Linear limit  H/L₀ ≈ 0.006  (deep water)'],
     ];
     const LX = ML + 5, LY = MT + 8;
     const LW = 210, LH = items.length * 14 + 8;
