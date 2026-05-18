@@ -60,30 +60,33 @@ function classifyWaveTheory(H, k, L, d) {
   const HOverL = H / L;
   const HOverd = H / d;
   const kd     = k * d;
+  const tanhkd = Math.tanh(kd);
 
   // Breaking — Miche (1951)
-  if (HOverL >= 0.142 * Math.tanh(kd)) return 'breaking';
-
+  if (HOverL >= 0.142 * tanhkd) return 'breaking';
   // Breaking — McCowan (shallow water)
   if (HOverd >= 0.78 && dOverL <= 0.05) return 'breaking';
 
-  // Ur₀ = H·L₀²/d³ using deep-water wavelength L₀ = L/tanh(kd)
-  // Matches diagram: U = y/(4π²x³) so any U threshold gives a straight slope-3 line
-  const L0  = L / Math.tanh(kd);
-  const Ur0 = H * L0 * L0 / (d * d * d);
-
-  // Intermediate to deep: Stokes regime
-  // U=26 is the diagram's Stokes/Cnoidal boundary; sub-order thresholds are approximate
-  if (dOverL > 0.05) {
-    if (Ur0 >= 26) return 'stokes4';
-    if (Ur0 >= 8)  return 'stokes3';
-    if (Ur0 >= 1)  return 'stokes2';
-    return 'linear';
+  // Shallow water (d/L ≤ 0.05): cnoidal throughout the plotted range
+  if (dOverL <= 0.05) {
+    if (HOverd >= 0.55) return 'solitary';
+    return 'cnoidal';
   }
 
-  // Shallow: rough engineering split between solitary and cnoidal
-  if (HOverd >= 0.55) return 'solitary';
-  return 'cnoidal';
+  // Intermediate to deep water
+  // Ursell number with ACTUAL wavelength — matches the reference's Hλ²/h³=26 boundary
+  const Ur = H * L * L / (d * d * d);
+  if (Ur >= 26) return 'cnoidal';   // 5th-order stream function region in reference
+
+  // Sub-order boundaries (approximate; analytically inexpressible per Le Méhaut 1976):
+  //   H = HB/4 labels the Stokes 4th/3rd transition in the reference figure
+  //   H/L₀ = 0.006 is the horizontal line separating Stokes 2nd from linear theory
+  const HB = 0.142 * tanhkd * L;
+  if (H / HB >= 0.35) return 'stokes4';
+  if (H / HB >= 0.15) return 'stokes3';
+  const L0 = L / tanhkd;
+  if (H / L0 >= 0.006) return 'stokes2';
+  return 'linear';
 }
 
 // ── Layer 3: Input validation ─────────────────────────────────────────────
