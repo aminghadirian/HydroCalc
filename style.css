@@ -12,14 +12,6 @@
   --color-deep:         #1565c0;
   --color-intermediate: #2e7d32;
   --color-shallow:      #e65100;
-  /* Wave theory colors */
-  --color-theory-linear:   #1565c0;
-  --color-theory-stokes2:  #2e7d32;
-  --color-theory-stokes3:  #e65100;
-  --color-theory-stokes4:  #4e342e;
-  --color-theory-cnoidal:  #6a1b9a;
-  --color-theory-solitary: #795548;
-  --color-theory-breaking: #c62828;
   --radius: 8px;
   --shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
   --font-mono: 'Courier New', Courier, monospace;
@@ -291,42 +283,6 @@ main {
   box-shadow: var(--shadow);
   padding: 1.25rem 1rem;
 }
-
-.theory-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-
-.theory-label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* Badge color driven by data-theory attribute via CSS custom property cascade */
-.theory-badge {
-  display: inline-block;
-  padding: 0.35rem 1rem;
-  border-radius: 2rem;
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: #fff;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  background: var(--_theory-color, #888);
-}
-
-.theory-badge[data-theory="linear"]   { --_theory-color: var(--color-theory-linear); }
-.theory-badge[data-theory="stokes2"]  { --_theory-color: var(--color-theory-stokes2); }
-.theory-badge[data-theory="stokes3"]  { --_theory-color: var(--color-theory-stokes3); }
-.theory-badge[data-theory="stokes4"]  { --_theory-color: var(--color-theory-stokes4); }
-.theory-badge[data-theory="cnoidal"]  { --_theory-color: var(--color-theory-cnoidal); }
-.theory-badge[data-theory="solitary"] { --_theory-color: var(--color-theory-solitary); }
-.theory-badge[data-theory="breaking"] { --_theory-color: var(--color-theory-breaking); }
 
 /* SVG plot container — makes SVG responsive */
 .lehaut-container {

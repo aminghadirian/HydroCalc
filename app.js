@@ -54,40 +54,6 @@ function computeWaveProperties(T, d) {
   return { k, L, C, L0, dOverL, classification, iterations };
 }
 
-// ── Layer 2.5: Wave theory classification ─────────────────────────────────
-function classifyWaveTheory(H, k, L, d) {
-  const dOverL = d / L;
-  const HOverL = H / L;
-  const HOverd = H / d;
-  const kd     = k * d;
-  const tanhkd = Math.tanh(kd);
-
-  // Breaking — Miche (1951)
-  if (HOverL >= 0.142 * tanhkd) return 'breaking';
-  // Breaking — McCowan (shallow water)
-  if (HOverd >= 0.78 && dOverL <= 0.05) return 'breaking';
-
-  // Shallow water (d/L ≤ 0.05): cnoidal throughout the plotted range
-  if (dOverL <= 0.05) {
-    if (HOverd >= 0.55) return 'solitary';
-    return 'cnoidal';
-  }
-
-  // Intermediate to deep water
-  // Ursell number with ACTUAL wavelength — matches the reference's Hλ²/h³=26 boundary
-  const Ur = H * L * L / (d * d * d);
-  if (Ur >= 26) return 'cnoidal';   // 5th-order stream function region in reference
-
-  // Sub-order boundaries (approximate; analytically inexpressible per Le Méhaut 1976):
-  //   H = HB/4 labels the Stokes 4th/3rd transition in the reference figure
-  //   H/L₀ = 0.006 is the horizontal line separating Stokes 2nd from linear theory
-  const HB = 0.142 * tanhkd * L;
-  if (H / HB >= 0.35) return 'stokes4';
-  if (H / HB >= 0.15) return 'stokes3';
-  const L0 = L / tanhkd;
-  if (H / L0 >= 0.006) return 'stokes2';
-  return 'linear';
-}
 
 // ── Layer 3: Input validation ─────────────────────────────────────────────
 function validateInputs(rawT, rawD, rawH) {
@@ -133,25 +99,6 @@ const BADGE_LABELS = {
   shallow:      'Shallow Water',
 };
 
-const THEORY_COLORS = {
-  linear:   '#1565c0',
-  stokes2:  '#2e7d32',
-  stokes3:  '#e65100',
-  stokes4:  '#4e342e',
-  cnoidal:  '#6a1b9a',
-  solitary: '#795548',
-  breaking: '#c62828',
-};
-
-const THEORY_LABELS = {
-  linear:   'Linear (Airy)',
-  stokes2:  'Stokes 2nd Order',
-  stokes3:  'Stokes 3rd Order',
-  stokes4:  'Stokes 4th Order',
-  cnoidal:  'Cnoidal Wave',
-  solitary: 'Solitary Wave',
-  breaking: 'Breaking Wave',
-};
 
 // Element references — cached once at startup
 const form         = document.getElementById('wave-form');
@@ -171,7 +118,6 @@ const resC         = document.getElementById('res-C');
 const resL0        = document.getElementById('res-L0');
 const resDL        = document.getElementById('res-dL');
 const theorySect   = document.getElementById('theory-section');
-const theoryBadge  = document.getElementById('theory-badge');
 const lehautPlot   = document.getElementById('lehaut-plot');
 
 function fmt(n) {
@@ -208,7 +154,7 @@ function showResults(props) {
 }
 
 // ── Le Méhaut SVG builder ─────────────────────────────────────────────────
-function buildLeMehautSVG(userX, userY, theory) {
+function buildLeMehautSVG(userX, userY) {
   // Coordinate system of Water_wave_theories.svg (640×720, LaTeX/PGF-generated)
   const VW = 640, VH = 720;
   const ML = 135.11, MR = 608.87, MT = 51.96, MB = 604.51;
@@ -232,7 +178,7 @@ function buildLeMehautSVG(userX, userY, theory) {
     const sv = toSVG(userX, userY);
     if (!sv) return '';
     const [ux, uy] = [sv[0].toFixed(1), sv[1].toFixed(1)];
-    const color = THEORY_COLORS[theory] || '#333';
+    const color = '#e53935';
     return `
       <line x1="${ML.toFixed(1)}" y1="${uy}" x2="${MR.toFixed(1)}" y2="${uy}"
             stroke="${color}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.8"/>
@@ -273,17 +219,11 @@ form.addEventListener('submit', (e) => {
     showResults(props);
 
     if (validation.H !== undefined) {
-      const { k, L } = props;
-      const theory = classifyWaveTheory(validation.H, k, L, validation.d);
-
-      theoryBadge.textContent   = THEORY_LABELS[theory];
-      theoryBadge.dataset.theory = theory;
-
       const gT2   = G * validation.T * validation.T;
       const userX = validation.d / gT2;
       const userY = validation.H / gT2;
 
-      lehautPlot.innerHTML = buildLeMehautSVG(userX, userY, theory);
+      lehautPlot.innerHTML = buildLeMehautSVG(userX, userY);
       theorySect.hidden    = false;
     }
   } catch (err) {
