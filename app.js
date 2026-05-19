@@ -57,6 +57,10 @@ function computeWaveProperties(T, d) {
 
 // ── Layer 3: Input validation ─────────────────────────────────────────────
 function validateInputs(rawT, rawD, rawH) {
+  rawT = rawT.replace(',', '.');
+  rawD = rawD.replace(',', '.');
+  if (rawH !== undefined) rawH = rawH.replace(',', '.');
+
   const errors = {};
   const T = parseFloat(rawT);
   const d = parseFloat(rawD);
