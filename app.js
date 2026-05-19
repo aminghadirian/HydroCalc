@@ -161,7 +161,7 @@ function buildLeMehautSVG(userX, userY) {
   const PW = MR - ML, PH = MB - MT;
 
   // Axis limits: x = d/gT² ∈ [0.001, 0.2], y = H/gT² ∈ [5e-5, 0.05] (log scale)
-  const XMIN = -3, XMAX = Math.log10(0.2);
+  const XMIN = Math.log10(0.0005), XMAX = Math.log10(0.2);
   const YMIN = Math.log10(5e-5), YMAX = Math.log10(0.05);
 
   function toSVG(domX, domY) {
