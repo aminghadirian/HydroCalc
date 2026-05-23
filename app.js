@@ -54,56 +54,75 @@ function computeWaveProperties(T, d) {
   return { k, L, C, L0, dOverL, classification };
 }
 
-// ── Layer 3: Row-based validation ─────────────────────────────────────────
-function validateAllRows() {
-  const rows  = Array.from(waveRowsEl.querySelectorAll('.wave-row'));
-  const msgs  = [];
-  const waves = [];
-  let allOk   = true;
+// ── Layer 3: Input validation ─────────────────────────────────────────────
 
-  rows.forEach((row, i) => {
-    const n   = i + 1;
-    const inp = {
-      T: row.querySelector('.wave-T'),
-      d: row.querySelector('.wave-d'),
-      H: row.querySelector('.wave-H'),
-    };
-    const raw = {
-      T: inp.T.value.trim().replace(',', '.'),
-      d: inp.d.value.trim().replace(',', '.'),
-      H: inp.H.value.trim().replace(',', '.'),
-    };
+// Splits on ; and normalises European decimal comma per token.
+function parseMultiRaw(raw) {
+  if (!raw || raw.trim() === '') return [];
+  return raw.split(';').map(s => s.trim().replace(',', '.'));
+}
 
-    let rowOk = true;
-    const mark = (el, msg) => {
-      el.classList.add('is-invalid');
-      msgs.push(msg);
-      rowOk = false;
-    };
+function validateInputs(rawT, rawD, rawH) {
+  const errors  = {};
+  const tTokens = parseMultiRaw(rawT);
+  const dTokens = parseMultiRaw(rawD);
+  const hTokens = parseMultiRaw(rawH);
 
-    const T = parseFloat(raw.T);
-    if (!raw.T || isNaN(T))  mark(inp.T, `Wave ${n}: period is required.`);
-    else if (T <= 0)          mark(inp.T, `Wave ${n}: period must be > 0.`);
-    else if (T > 1000)        mark(inp.T, `Wave ${n}: period must be ≤ 1000 s.`);
-
-    const d = parseFloat(raw.d);
-    if (!raw.d || isNaN(d))  mark(inp.d, `Wave ${n}: depth is required.`);
-    else if (d <= 0)          mark(inp.d, `Wave ${n}: depth must be > 0.`);
-    else if (d > 11000)       mark(inp.d, `Wave ${n}: depth must be ≤ 11,000 m.`);
-
-    let H;
-    if (raw.H !== '') {
-      const v = parseFloat(raw.H);
-      if (isNaN(v) || v <= 0) mark(inp.H, `Wave ${n}: height must be > 0 if provided.`);
-      else H = v;
+  // Validate T tokens
+  const Ts = [];
+  if (tTokens.length === 0) {
+    errors.period = 'Wave period is required.';
+  } else {
+    for (const tok of tTokens) {
+      const v = parseFloat(tok);
+      if (!tok || isNaN(v)) { errors.period = 'All period values must be valid numbers.'; break; }
+      if (v <= 0)            { errors.period = 'Wave period must be greater than 0.';     break; }
+      if (v > 1000)          { errors.period = 'Wave period must be ≤ 1000 s.';           break; }
+      Ts.push(v);
     }
+  }
 
-    if (rowOk) waves.push({ T, d, H });
-    else allOk = false;
-  });
+  // Validate d tokens
+  const ds = [];
+  if (dTokens.length === 0) {
+    errors.depth = 'Water depth is required.';
+  } else {
+    for (const tok of dTokens) {
+      const v = parseFloat(tok);
+      if (!tok || isNaN(v)) { errors.depth = 'All depth values must be valid numbers.';             break; }
+      if (v <= 0)            { errors.depth = 'Water depth must be greater than 0.';                break; }
+      if (v > 11000)         { errors.depth = 'Water depth must be ≤ 11,000 m (Mariana Trench).';  break; }
+      ds.push(v);
+    }
+  }
 
-  if (!allOk) return { valid: false, msgs };
-  return { valid: true, waves };
+  // Validate H tokens (optional)
+  const Hs = [];
+  for (const tok of hTokens) {
+    const v = parseFloat(tok);
+    if (isNaN(v) || v <= 0) { errors.height = 'Wave height must be greater than 0 if provided.'; break; }
+    Hs.push(v);
+  }
+
+  if (Object.keys(errors).length > 0) return { valid: false, errors };
+
+  // All multi-valued arrays must be length 1 or the same length N
+  const N   = Math.max(Ts.length, ds.length, Hs.length || 0);
+  const bad = (arr) => arr.length > 1 && arr.length !== N;
+  if (bad(Ts))                   errors.period = `Count mismatch: expected 1 or ${N} value(s).`;
+  if (bad(ds))                   errors.depth  = `Count mismatch: expected 1 or ${N} value(s).`;
+  if (Hs.length > 0 && bad(Hs)) errors.height = `Count mismatch: expected 1 or ${N} value(s).`;
+
+  if (Object.keys(errors).length > 0) return { valid: false, errors };
+
+  const broadcast = (arr) => arr.length === 1 ? Array(N).fill(arr[0]) : arr;
+  return {
+    valid: true,
+    N,
+    Ts: broadcast(Ts),
+    ds: broadcast(ds),
+    Hs: Hs.length > 0 ? broadcast(Hs) : null,
+  };
 }
 
 // ── Layer 4: DOM controller ───────────────────────────────────────────────
@@ -115,18 +134,21 @@ const BADGE_LABELS = {
 };
 
 const PROPS_DEF = [
-  { label: 'Wavelength <i>L</i>',                              unit: 'm',     get: p => fmt(p.L)      },
-  { label: 'Wave number <i>k</i> = 2&pi;/<i>L</i>',           unit: 'rad/m', get: p => fmt(p.k)      },
-  { label: 'Wave celerity <i>C</i> = <i>L</i>/<i>T</i>',      unit: 'm/s',   get: p => fmt(p.C)      },
-  { label: 'Deep-water wavelength <i>L</i><sub>0</sub>',       unit: 'm',     get: p => fmt(p.L0)     },
-  { label: 'Relative depth <i>d</i>/<i>L</i>',                 unit: '&mdash;', get: p => fmt(p.dOverL) },
+  { label: 'Wavelength <i>L</i>',                         unit: 'm',         get: p => fmt(p.L)      },
+  { label: 'Wave number <i>k</i> = 2&pi;/<i>L</i>',       unit: 'rad/m',     get: p => fmt(p.k)      },
+  { label: 'Wave celerity <i>C</i> = <i>L</i>/<i>T</i>',  unit: 'm/s',       get: p => fmt(p.C)      },
+  { label: 'Deep-water wavelength <i>L</i><sub>0</sub>',   unit: 'm',         get: p => fmt(p.L0)     },
+  { label: 'Relative depth <i>d</i>/<i>L</i>',             unit: '&mdash;',   get: p => fmt(p.dOverL) },
 ];
 
 // Element references — cached once at startup
 const form         = document.getElementById('wave-form');
-const waveRowsEl   = document.getElementById('wave-rows');
-const addRowBtn    = document.getElementById('add-row-btn');
-const rowErrorsEl  = document.getElementById('row-errors');
+const periodInput  = document.getElementById('period');
+const depthInput   = document.getElementById('depth');
+const heightInput  = document.getElementById('height');
+const periodError  = document.getElementById('period-error');
+const depthError   = document.getElementById('depth-error');
+const heightError  = document.getElementById('height-error');
 const resultsEl    = document.getElementById('results');
 const solverErrEl  = document.getElementById('solver-error');
 const solverErrMsg = document.getElementById('solver-error-msg');
@@ -141,84 +163,22 @@ function fmt(n) {
   return parseFloat(n.toPrecision(4)).toString();
 }
 
-// ── Row lifecycle ─────────────────────────────────────────────────────────
-function createWaveRow(idx) {
-  const div        = document.createElement('div');
-  div.className    = 'wave-row';
-  div.dataset.idx  = idx;
-  div.innerHTML = `
-    <span class="row-num">${idx + 1}</span>
-    <input type="text" inputmode="decimal" class="wave-T"
-           placeholder="10"  aria-label="Wave period ${idx + 1} (s)"/>
-    <input type="text" inputmode="decimal" class="wave-d"
-           placeholder="25"  aria-label="Water depth ${idx + 1} (m)"/>
-    <input type="text" inputmode="decimal" class="wave-H"
-           placeholder="opt" aria-label="Wave height ${idx + 1} (m)"/>
-    <button type="button" class="remove-row-btn" aria-label="Remove wave ${idx + 1}">&times;</button>`;
-  return div;
-}
-
-function updateRowNumbers() {
-  waveRowsEl.querySelectorAll('.wave-row').forEach((row, i) => {
-    row.querySelector('.row-num').textContent = i + 1;
-    row.dataset.idx = i;
-    row.querySelector('.wave-T').setAttribute('aria-label', `Wave period ${i + 1} (s)`);
-    row.querySelector('.wave-d').setAttribute('aria-label', `Water depth ${i + 1} (m)`);
-    row.querySelector('.wave-H').setAttribute('aria-label', `Wave height ${i + 1} (m)`);
-    row.querySelector('.remove-row-btn').setAttribute('aria-label', `Remove wave ${i + 1}`);
-  });
-}
-
-function updateRemoveButtons() {
-  const rows = waveRowsEl.querySelectorAll('.wave-row');
-  rows.forEach(row => {
-    row.querySelector('.remove-row-btn').hidden = rows.length === 1;
-  });
-}
-
-// Initialise with one row
-waveRowsEl.appendChild(createWaveRow(0));
-updateRemoveButtons();
-
-// ── Row event delegation ──────────────────────────────────────────────────
-addRowBtn.addEventListener('click', () => {
-  const n   = waveRowsEl.querySelectorAll('.wave-row').length;
-  const row = createWaveRow(n);
-  waveRowsEl.appendChild(row);
-  updateRemoveButtons();
-  row.querySelector('.wave-T').focus();
-});
-
-waveRowsEl.addEventListener('click', (e) => {
-  if (!e.target.classList.contains('remove-row-btn')) return;
-  e.target.closest('.wave-row').remove();
-  updateRowNumbers();
-  updateRemoveButtons();
-});
-
-waveRowsEl.addEventListener('input', (e) => {
-  if (e.target.tagName === 'INPUT') e.target.classList.remove('is-invalid');
-  rowErrorsEl.hidden = true;
-});
-
-// ── Error helpers ─────────────────────────────────────────────────────────
 function clearErrors() {
-  rowErrorsEl.hidden       = true;
-  rowErrorsEl.innerHTML    = '';
-  waveRowsEl.querySelectorAll('input.is-invalid')
-    .forEach(el => el.classList.remove('is-invalid'));
+  periodError.textContent  = '';
+  depthError.textContent   = '';
+  heightError.textContent  = '';
   solverErrEl.hidden       = true;
   solverErrMsg.textContent = '';
 }
 
-function showRowErrors(msgs) {
-  rowErrorsEl.innerHTML = msgs.map(m => `<p>${m}</p>`).join('');
-  rowErrorsEl.hidden    = false;
+function showFieldErrors(errors) {
+  if (errors.period) periodError.textContent = errors.period;
+  if (errors.depth)  depthError.textContent  = errors.depth;
+  if (errors.height) heightError.textContent = errors.height;
 }
 
-// ── Results display ───────────────────────────────────────────────────────
 function showResults(allProps) {
-  // Classification badges — one per distinct classification
+  // One badge per distinct classification
   const badgeSpans = allProps.map(p =>
     `<span class="classification-badge ${p.classification}">${BADGE_LABELS[p.classification]}</span>`
   );
@@ -226,7 +186,7 @@ function showResults(allProps) {
   badge.innerHTML = uniq.length === 1 ? uniq[0] : badgeSpans.join('');
   badge.className = 'classification-badges';
 
-  // Property blocks: label + unit on top, all values on one line separated by " ; "
+  // Property blocks: name + unit on top, all values on one line
   propsGrid.innerHTML = PROPS_DEF.map(({ label, unit, get }) =>
     `<div class="prop-block">
       <div class="prop-label">${label} <span class="prop-unit">[${unit}]</span></div>
@@ -308,7 +268,7 @@ function exportCSV(waves, allProps) {
   URL.revokeObjectURL(a.href);
 }
 
-// ── Submit handler ────────────────────────────────────────────────────────
+// ── Event handlers ────────────────────────────────────────────────────────
 
 let lastWaves    = null;
 let lastAllProps = null;
@@ -321,25 +281,35 @@ form.addEventListener('submit', (e) => {
   exportCsvBtn.hidden = true;
   saveSvgBtn.hidden   = true;
 
-  const v = validateAllRows();
-  if (!v.valid) {
-    showRowErrors(v.msgs);
+  const validation = validateInputs(
+    periodInput.value,
+    depthInput.value,
+    heightInput.value,
+  );
+
+  if (!validation.valid) {
+    showFieldErrors(validation.errors);
     return;
   }
 
   try {
-    const allProps = v.waves.map(w => computeWaveProperties(w.T, w.d));
+    const waves = validation.Ts.map((T, i) => ({
+      T,
+      d: validation.ds[i],
+      H: validation.Hs ? validation.Hs[i] : undefined,
+    }));
+    const allProps = waves.map(w => computeWaveProperties(w.T, w.d));
+
     showResults(allProps);
-    lastWaves    = v.waves;
+    lastWaves    = waves;
     lastAllProps = allProps;
     exportCsvBtn.hidden = false;
 
-    const points = v.waves.map(w =>
+    const points = waves.map(w =>
       w.H !== undefined
         ? { x: w.d / (G * w.T * w.T), y: w.H / (G * w.T * w.T) }
         : null
     );
-
     if (points.some(p => p !== null)) {
       lehautPlot.innerHTML = buildLeMehautSVG(points);
       theorySect.hidden    = false;
@@ -365,3 +335,7 @@ saveSvgBtn.addEventListener('click', () => {
   a.click();
   URL.revokeObjectURL(a.href);
 });
+
+periodInput.addEventListener('input', () => { periodError.textContent = ''; });
+depthInput.addEventListener('input',  () => { depthError.textContent  = ''; });
+heightInput.addEventListener('input', () => { heightError.textContent = ''; });
