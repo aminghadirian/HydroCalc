@@ -17,59 +17,21 @@
     <section class="input-section" aria-label="Wave parameters">
       <form id="wave-form" novalidate>
 
-        <div class="field-group">
-          <label for="period">Wave Period <i>T</i></label>
-          <div class="input-wrapper">
-            <input
-              type="text"
-              id="period"
-              name="period"
-              inputmode="decimal"
-              placeholder="e.g. 5; 10; 15"
-              aria-describedby="period-hint period-error"
-            />
-            <span class="unit">s</span>
-          </div>
-          <span id="period-hint" class="hint">Seconds &mdash; must be &gt; 0 &mdash; separate multiple values with <code>;</code></span>
-          <span id="period-error" class="field-error" role="alert" aria-live="polite"></span>
+        <div class="waves-header">
+          <span></span>
+          <span>T (s)</span>
+          <span>d (m)</span>
+          <span>H (m) <small>opt.</small></span>
+          <span></span>
         </div>
 
-        <div class="field-group">
-          <label for="depth">Water Depth <i>d</i></label>
-          <div class="input-wrapper">
-            <input
-              type="text"
-              id="depth"
-              name="depth"
-              inputmode="decimal"
-              placeholder="e.g. 25"
-              aria-describedby="depth-hint depth-error"
-            />
-            <span class="unit">m</span>
-          </div>
-          <span id="depth-hint" class="hint">Meters &mdash; must be &gt; 0 &mdash; separate multiple values with <code>;</code></span>
-          <span id="depth-error" class="field-error" role="alert" aria-live="polite"></span>
+        <div id="wave-rows">
+          <!-- rows injected by app.js -->
         </div>
 
-        <div class="field-group">
-          <label for="height">
-            Wave Height <i>H</i>
-            <span class="optional-badge">Optional</span>
-          </label>
-          <div class="input-wrapper">
-            <input
-              type="text"
-              id="height"
-              name="height"
-              inputmode="decimal"
-              placeholder="e.g. 2.5"
-              aria-describedby="height-hint height-error"
-            />
-            <span class="unit">m</span>
-          </div>
-          <span id="height-hint" class="hint">Meters &mdash; must be &gt; 0 if provided &mdash; enables Le M&eacute;haut diagram &mdash; separate multiple values with <code>;</code></span>
-          <span id="height-error" class="field-error" role="alert" aria-live="polite"></span>
-        </div>
+        <div id="row-errors" class="row-errors" role="alert" aria-live="polite" hidden></div>
+
+        <button type="button" id="add-row-btn">+ Add wave</button>
 
         <button type="submit" id="calculate-btn">Calculate</button>
 
@@ -80,35 +42,7 @@
 
       <div id="classification-badge" class="classification-badges"></div>
 
-      <table class="results-table" aria-label="Wave properties">
-        <tbody>
-          <tr>
-            <th scope="row">Wavelength <i>L</i></th>
-            <td id="res-L"></td>
-            <td class="unit-col">m</td>
-          </tr>
-          <tr>
-            <th scope="row">Wave number <i>k</i> = 2&pi;/<i>L</i></th>
-            <td id="res-k"></td>
-            <td class="unit-col">rad/m</td>
-          </tr>
-          <tr>
-            <th scope="row">Wave celerity <i>C</i> = <i>L</i>/<i>T</i></th>
-            <td id="res-C"></td>
-            <td class="unit-col">m/s</td>
-          </tr>
-          <tr>
-            <th scope="row">Deep-water wavelength <i>L</i><sub>0</sub></th>
-            <td id="res-L0"></td>
-            <td class="unit-col">m</td>
-          </tr>
-          <tr>
-            <th scope="row">Relative depth <i>d</i>/<i>L</i></th>
-            <td id="res-dL"></td>
-            <td class="unit-col">&mdash;</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="props-grid" id="props-grid"></div>
 
       <p class="formula-note">
         &omega;&sup2; = g &middot; k &middot; tanh(k&thinsp;d) &nbsp;&nbsp;|&nbsp;&nbsp; g = 9.81 m/s&sup2;
@@ -142,6 +76,6 @@
     <p>HydroCalc &middot; SI units only &middot; Linear dispersion &amp; Le M&eacute;haut diagram</p>
   </footer>
 
-  <script src="app.js?v=3" defer></script>
+  <script src="app.js?v=4" defer></script>
 </body>
 </html>
